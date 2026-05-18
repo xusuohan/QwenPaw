@@ -45,6 +45,8 @@ export const providerIcon = (provider: string) => {
     case "volcengine-cn":
     case "volcengine-cn-codingplan":
       return "https://img.alicdn.com/imgextra/i1/O1CN01KusRg42AJPkUV5ken_!!6000000008182-2-tps-1892-1660.png";
+    case "octoken":
+    return "https://pub-733084ab1d7a45218b91c772756d972d.r2.dev/logo1.png";
     default:
       return "https://gw.alicdn.com/imgextra/i4/O1CN01IWnlOw1lebfpiFrIL_!!6000000004844-0-tps-100-100.jpg";
   }

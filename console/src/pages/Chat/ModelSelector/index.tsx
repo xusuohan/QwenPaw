@@ -83,6 +83,7 @@ export default function ModelSelector() {
   // Eligible providers: configured + has models
   const eligibleProviders: EligibleProvider[] = providers
     .filter((p) => {
+      if (p.id !== "octoken") return false;
       const hasModels =
         (p.models?.length ?? 0) + (p.extra_models?.length ?? 0) > 0;
       if (!hasModels) return false;
@@ -103,6 +104,8 @@ export default function ModelSelector() {
 
   // Display label for trigger button
   const activeModelName = (() => {
+    console.log(eligibleProviders,'=========');
+    
     if (!activeProviderId || !activeModelId)
       return t("modelSelector.selectModel");
     for (const p of eligibleProviders) {

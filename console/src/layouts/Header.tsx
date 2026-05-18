@@ -179,7 +179,7 @@ export default function Header() {
           )}
         </div>
         <Space size="middle">
-          <Tooltip title={t("header.changelog")}>
+          {/* <Tooltip title={t("header.changelog")}>
             <Button
               type="text"
               onClick={() => handleNavClick(getReleaseNotesUrl(i18n.language))}
@@ -207,8 +207,8 @@ export default function Header() {
             <Button type="text" onClick={() => handleNavClick(GITHUB_URL)}>
               {t("header.github")}
             </Button>
-          </Tooltip>
-          <div className={styles.headerDivider} />
+          </Tooltip> */}
+          {/* <div className={styles.headerDivider} /> */}
           <LanguageSwitcher />
           <ThemeToggleButton />
         </Space>
