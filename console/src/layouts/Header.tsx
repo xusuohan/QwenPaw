@@ -1,4 +1,5 @@
-import { Layout, Space, Badge, Spin, Tooltip } from "antd";
+// import { Layout, Space, Badge, Spin, Tooltip } from "antd";
+import { Layout, Space, Badge, Spin } from "antd";
 import LanguageSwitcher from "../components/LanguageSwitcher/index";
 import ThemeToggleButton from "../components/ThemeToggleButton";
 import { useTranslation } from "react-i18next";
@@ -6,9 +7,9 @@ import { Button, Modal } from "@agentscope-ai/design";
 import styles from "./index.module.less";
 import api from "../api";
 import {
-  GITHUB_URL,
-  getDocsUrl,
-  getFaqUrl,
+  // GITHUB_URL,
+  // getDocsUrl,
+  // getFaqUrl,
   getReleaseNotesUrl,
   PYPI_URL,
   ONE_HOUR_MS,
