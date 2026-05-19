@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
-import { Button, Input } from "@agentscope-ai/design";
-import { PlusOutlined, SearchOutlined, SyncOutlined } from "@ant-design/icons";
+// import { Button, Input } from "@agentscope-ai/design";
+// import { PlusOutlined, SearchOutlined, SyncOutlined } from "@ant-design/icons";
 import { useProviders } from "./useProviders";
 import {
   LoadingState,
@@ -21,7 +21,8 @@ function ModelsPage() {
   const { t } = useTranslation();
   const { providers, activeModels, loading, error, fetchAll } = useProviders();
   const [addProviderOpen, setAddProviderOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
+  // const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery] = useState("");
 
   const refreshProvidersSilently = useCallback(() => {
     void fetchAll(false);
@@ -115,8 +116,7 @@ function ModelsPage() {
                   current={t("models.providersTitle")}
                   className={styles.providersPageHeader}
                 />
-                <div className={styles.headerRight}>
-                  {/* ---- Search ---- */}
+                {/* <div className={styles.headerRight}>
                   <div className={styles.searchRow}>
                     <Input
                       placeholder={t("models.searchPlaceholder")}
@@ -141,7 +141,7 @@ function ModelsPage() {
                   >
                     {t("models.addProvider")}
                   </Button>
-                </div>
+                </div> */}
               </div>
 
               {localProviders.length > 0 && (

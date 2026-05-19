@@ -104,8 +104,6 @@ export default function ModelSelector() {
 
   // Display label for trigger button
   const activeModelName = (() => {
-    console.log(eligibleProviders,'=========');
-    
     if (!activeProviderId || !activeModelId)
       return t("modelSelector.selectModel");
     for (const p of eligibleProviders) {
