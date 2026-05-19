@@ -63,7 +63,9 @@
     "voiceTranscription": "Voice Transcription",
     "debug": "Debug",
     "plugins": "Plugins",
-    "backups": "Backups"
+    "backups": "Backups",
+    "showAdvancedMenus": "Show more menus",
+    "hideAdvancedMenus": "Hide more menus"
   },
   "debug": {
     "title": "Debug",

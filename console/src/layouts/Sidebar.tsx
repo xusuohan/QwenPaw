@@ -8,6 +8,7 @@ import {
   Tooltip,
   type MenuProps,
 } from "antd";
+import { EyeOutlined, EyeInvisibleOutlined } from "@ant-design/icons";
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -46,6 +47,10 @@ import { usePlugins } from "../plugins/PluginContext";
 import styles from "./index.module.less";
 import { useTheme } from "../contexts/ThemeContext";
 import { KEY_TO_PATH, DEFAULT_OPEN_KEYS } from "./constants";
+import {
+  readShowAdvancedNav,
+  writeShowAdvancedNav,
+} from "./navConfig";
 
 // ── Layout ────────────────────────────────────────────────────────────────
 
@@ -70,6 +75,15 @@ export default function Sidebar({ selectedKey }: SidebarProps) {
   const [accountLoading, setAccountLoading] = useState(false);
   const [accountForm] = Form.useForm();
   const [collapsed, setCollapsed] = useState(false);
+  const [showAdvancedNav, setShowAdvancedNav] = useState(readShowAdvancedNav);
+
+  const toggleAdvancedNav = () => {
+    setShowAdvancedNav((prev) => {
+      const next = !prev;
+      writeShowAdvancedNav(next);
+      return next;
+    });
+  };
 
   // ── Effects ──────────────────────────────────────────────────────────────
 
@@ -162,18 +176,22 @@ export default function Sidebar({ selectedKey }: SidebarProps) {
       path: "/cron-jobs",
       label: t("nav.cronJobs"),
     },
-    {
-      key: "heartbeat",
-      icon: <SparkVoiceChat01Line size={18} />,
-      path: "/heartbeat",
-      label: t("nav.heartbeat"),
-    },
-    {
-      key: "workspace",
-      icon: <SparkLocalFileLine size={18} />,
-      path: "/workspace",
-      label: t("nav.workspace"),
-    },
+    ...(showAdvancedNav
+      ? [
+          {
+            key: "heartbeat",
+            icon: <SparkVoiceChat01Line size={18} />,
+            path: "/heartbeat",
+            label: t("nav.heartbeat"),
+          },
+          {
+            key: "workspace",
+            icon: <SparkLocalFileLine size={18} />,
+            path: "/workspace",
+            label: t("nav.workspace"),
+          },
+        ]
+      : []),
     {
       key: "skills",
       icon: <SparkMagicWandLine size={18} />,
@@ -186,12 +204,16 @@ export default function Sidebar({ selectedKey }: SidebarProps) {
       path: "/skill-pool",
       label: t("nav.skillPool", "Skill Pool"),
     },
-    {
-      key: "tools",
-      icon: <SparkToolLine size={18} />,
-      path: "/tools",
-      label: t("nav.tools"),
-    },
+    ...(showAdvancedNav
+      ? [
+          {
+            key: "tools",
+            icon: <SparkToolLine size={18} />,
+            path: "/tools",
+            label: t("nav.tools"),
+          },
+        ]
+      : []),
     {
       key: "mcp",
       icon: <SparkMcpMcpLine size={18} />,
@@ -204,12 +226,16 @@ export default function Sidebar({ selectedKey }: SidebarProps) {
       path: "/acp",
       label: t("nav.acp"),
     },
-    {
-      key: "agent-config",
-      icon: <SparkModifyLine size={18} />,
-      path: "/agent-config",
-      label: t("nav.agentConfig"),
-    },
+    ...(showAdvancedNav
+      ? [
+          {
+            key: "agent-config",
+            icon: <SparkModifyLine size={18} />,
+            path: "/agent-config",
+            label: t("nav.agentConfig"),
+          },
+        ]
+      : []),
     {
       key: "agent-stats",
       icon: <SparkBarChartLine size={18} />,
@@ -246,24 +272,28 @@ export default function Sidebar({ selectedKey }: SidebarProps) {
       path: "/token-usage",
       label: t("nav.tokenUsage"),
     },
-    {
-      key: "backups",
-      icon: <SparkSaveLine size={18} />,
-      path: "/backups",
-      label: t("nav.backups"),
-    },
-    {
-      key: "voice-transcription",
-      icon: <SparkMicLine size={18} />,
-      path: "/voice-transcription",
-      label: t("nav.voiceTranscription"),
-    },
-    {
-      key: "debug",
-      icon: <SparkDebugLine size={18} />,
-      path: "/debug",
-      label: t("nav.debug", "Debug"),
-    },
+    ...(showAdvancedNav
+      ? [
+          {
+            key: "backups",
+            icon: <SparkSaveLine size={18} />,
+            path: "/backups",
+            label: t("nav.backups"),
+          },
+          {
+            key: "voice-transcription",
+            icon: <SparkMicLine size={18} />,
+            path: "/voice-transcription",
+            label: t("nav.voiceTranscription"),
+          },
+          {
+            key: "debug",
+            icon: <SparkDebugLine size={18} />,
+            path: "/debug",
+            label: t("nav.debug", "Debug"),
+          },
+        ]
+      : []),
     // Append plugin nav items dynamically
     ...pluginRoutes.map((route) => ({
       key: route.path.replace(/^\//, ""),
@@ -300,32 +330,44 @@ export default function Sidebar({ selectedKey }: SidebarProps) {
           label: collapsed ? null : t("nav.cronJobs"),
           icon: <SparkDateLine size={16} />,
         },
-        {
-          key: "heartbeat",
-          label: collapsed ? null : t("nav.heartbeat"),
-          icon: <SparkVoiceChat01Line size={16} />,
-        },
+        ...(showAdvancedNav
+          ? [
+              {
+                key: "heartbeat",
+                label: collapsed ? null : t("nav.heartbeat"),
+                icon: <SparkVoiceChat01Line size={16} />,
+              },
+            ]
+          : []),
       ],
     },
     {
       key: "agent-group",
       label: collapsed ? null : t("nav.agent"),
       children: [
-        {
-          key: "workspace",
-          label: collapsed ? null : t("nav.workspace"),
-          icon: <SparkLocalFileLine size={16} />,
-        },
+        ...(showAdvancedNav
+          ? [
+              {
+                key: "workspace",
+                label: collapsed ? null : t("nav.workspace"),
+                icon: <SparkLocalFileLine size={16} />,
+              },
+            ]
+          : []),
         {
           key: "skills",
           label: collapsed ? null : t("nav.skills"),
           icon: <SparkMagicWandLine size={16} />,
         },
-        {
-          key: "tools",
-          label: collapsed ? null : t("nav.tools"),
-          icon: <SparkToolLine size={16} />,
-        },
+        ...(showAdvancedNav
+          ? [
+              {
+                key: "tools",
+                label: collapsed ? null : t("nav.tools"),
+                icon: <SparkToolLine size={16} />,
+              },
+            ]
+          : []),
         {
           key: "mcp",
           label: collapsed ? null : t("nav.mcp"),
@@ -336,11 +378,15 @@ export default function Sidebar({ selectedKey }: SidebarProps) {
           label: collapsed ? null : t("nav.acp"),
           icon: <SparkScanLine size={16} />,
         },
-        {
-          key: "agent-config",
-          label: collapsed ? null : t("nav.agentConfig"),
-          icon: <SparkModifyLine size={16} />,
-        },
+        ...(showAdvancedNav
+          ? [
+              {
+                key: "agent-config",
+                label: collapsed ? null : t("nav.agentConfig"),
+                icon: <SparkModifyLine size={16} />,
+              },
+            ]
+          : []),
         {
           key: "agent-stats",
           label: collapsed ? null : t("nav.agentStats"),
@@ -387,21 +433,25 @@ export default function Sidebar({ selectedKey }: SidebarProps) {
           label: collapsed ? null : t("nav.tokenUsage"),
           icon: <SparkDataLine size={16} />,
         },
-        {
-          key: "backups",
-          label: collapsed ? null : t("nav.backups"),
-          icon: <SparkSaveLine size={16} />,
-        },
-        {
-          key: "voice-transcription",
-          label: collapsed ? null : t("nav.voiceTranscription"),
-          icon: <SparkMicLine size={16} />,
-        },
-        {
-          key: "debug",
-          label: collapsed ? null : t("nav.debug", "Debug"),
-          icon: <SparkDebugLine size={16} />,
-        },
+        ...(showAdvancedNav
+          ? [
+              {
+                key: "backups",
+                label: collapsed ? null : t("nav.backups"),
+                icon: <SparkSaveLine size={16} />,
+              },
+              {
+                key: "voice-transcription",
+                label: collapsed ? null : t("nav.voiceTranscription"),
+                icon: <SparkMicLine size={16} />,
+              },
+              {
+                key: "debug",
+                label: collapsed ? null : t("nav.debug", "Debug"),
+                icon: <SparkDebugLine size={16} />,
+              },
+            ]
+          : []),
       ],
     },
   ];
@@ -528,6 +578,35 @@ export default function Sidebar({ selectedKey }: SidebarProps) {
       )}
 
       <div className={styles.collapseToggleContainer}>
+        <Tooltip
+          title={
+            showAdvancedNav
+              ? t("nav.hideAdvancedMenus")
+              : t("nav.showAdvancedMenus")
+          }
+          placement={collapsed ? "right" : "top"}
+        >
+          <Button
+            type="text"
+            icon={
+              showAdvancedNav ? (
+                <EyeOutlined style={{ fontSize: 18 }} />
+              ) : (
+                <EyeInvisibleOutlined style={{ fontSize: 18 }} />
+              )
+            }
+            onClick={toggleAdvancedNav}
+            className={`${styles.advancedNavToggle} ${
+              showAdvancedNav ? styles.advancedNavToggleActive : ""
+            }`}
+            aria-pressed={showAdvancedNav}
+            aria-label={
+              showAdvancedNav
+                ? t("nav.hideAdvancedMenus")
+                : t("nav.showAdvancedMenus")
+            }
+          />
+        </Tooltip>
         <Button
           type="text"
           icon={

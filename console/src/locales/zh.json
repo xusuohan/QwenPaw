@@ -63,7 +63,9 @@
     "voiceTranscription": "语音转写",
     "debug": "调试",
     "plugins": "插件",
-    "backups": "备份"
+    "backups": "备份",
+    "showAdvancedMenus": "显示更多菜单",
+    "hideAdvancedMenus": "隐藏更多菜单"
   },
   "debug": {
     "title": "调试",
