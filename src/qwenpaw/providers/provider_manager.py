@@ -1093,11 +1093,11 @@ class ProviderManager:  # pylint: disable=too-many-public-methods
             provider_info = plugin_provider["info"]
             provider_class = plugin_provider["class"]
             # Instantiate with **dict unpacking for Pydantic BaseModel
-            return provider_class(**provider_info.model_dump())
+            return None##provider_class(**provider_info.model_dump())
         if provider_id in self.builtin_providers:
             return self.builtin_providers[provider_id]
         if provider_id in self.custom_providers:
-            return self.custom_providers[provider_id]
+            return None  #self.custom_providers[provider_id]
         return None
 
     async def get_provider_info(self, provider_id: str) -> ProviderInfo | None:
