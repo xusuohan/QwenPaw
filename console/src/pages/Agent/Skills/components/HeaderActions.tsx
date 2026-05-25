@@ -173,7 +173,7 @@ export function HeaderActions({
                 onClick={onImportHub}
                 icon={<ImportOutlined />}
               >
-                {t("skills.importHub")}
+                {t("skills.remoteSkillLibrary")}
               </Button>
             </Tooltip>
             <Button type="primary" onClick={onToggleBatchMode}>

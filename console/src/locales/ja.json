@@ -185,6 +185,7 @@
     "title": "スキル",
     "description": "エージェントのスキルと機能を管理します。",
     "importHub": "Hub から取り込む",
+    "remoteSkillLibrary": "リモートスキルライブラリ",
     "importHubHint": "サポートされている Hub URL から現在のワークスペースにスキルを取り込みます",
     "importSkills": "スキルをインポート",
     "enterSkillUrl": "スキルのURLを入力",
