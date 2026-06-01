@@ -10,6 +10,7 @@ import { useAppMessage } from "../../../../hooks/useAppMessage";
 interface RemoteSkillLibraryModalProps {
   open: boolean;
   onCancel: () => void;
+  onDownloadSuccess?: () => void | Promise<void>;
 }
 
 const SKILLHUB_ORIGIN = "https://skillhub.goldlokai.com";
@@ -62,6 +63,7 @@ function resolveDisplayUrl(data: SkillhubMessage): string | null {
 export function RemoteSkillLibraryModal({
   open,
   onCancel,
+  onDownloadSuccess,
 }: RemoteSkillLibraryModalProps) {
   const { t } = useTranslation();
   const { message } = useAppMessage();
@@ -134,6 +136,9 @@ export function RemoteSkillLibraryModal({
         throw new Error(text || `Download request failed: ${resp.status}`);
       }
 
+      // Refresh skill list once backend accepts the request.
+      await onDownloadSuccess?.();
+
       const contentType = resp.headers.get("content-type") || "";
 
       // Most likely: backend returns the zip as a binary attachment.
@@ -185,7 +190,7 @@ export function RemoteSkillLibraryModal({
     } finally {
       setDownloading(false);
     }
-  }, [downloading, downloadUrl, downloadName, message, t]);
+  }, [downloading, downloadUrl, downloadName, message, onDownloadSuccess, t]);
 
   return (
     <Modal
