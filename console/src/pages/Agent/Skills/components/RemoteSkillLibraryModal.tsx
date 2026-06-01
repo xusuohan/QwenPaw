@@ -3,6 +3,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { DownloadOutlined, ExportOutlined, LinkOutlined } from "@ant-design/icons";
 import styles from "./RemoteSkillLibraryModal.module.less";
+import { getApiUrl } from "../../../../api/config";
+import { buildAuthHeaders } from "../../../../api/authHeaders";
+import { useAppMessage } from "../../../../hooks/useAppMessage";
 
 interface RemoteSkillLibraryModalProps {
   open: boolean;
@@ -19,14 +22,20 @@ type SkillhubMessage = {
   href?: string;
 };
 
-function parseDownloadUrlFromRoute(route: string): string | null {
+function parseDownloadUrlFromRoute(
+  route: string,
+): { downloadUrl: string; downloadName: string | null } | null {
   if (!route.includes("download")) return null;
   try {
     const parsed = new URL(route, SKILLHUB_ORIGIN);
     const download = parsed.searchParams.get("download");
+    const downloadName = parsed.searchParams.get("name");
     if (!download) return null;
     return download.startsWith("http://") || download.startsWith("https://")
-      ? download
+      ? {
+          downloadUrl: download,
+          downloadName: downloadName?.trim() || null,
+        }
       : null;
   } catch {
     return null;
@@ -55,8 +64,11 @@ export function RemoteSkillLibraryModal({
   onCancel,
 }: RemoteSkillLibraryModalProps) {
   const { t } = useTranslation();
+  const { message } = useAppMessage();
   const [realUrl, setRealUrl] = useState(SKILLHUB_HOME);
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
+  const [downloadName, setDownloadName] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState(false);
 
   const displayUrl = useMemo(() => {
     try {
@@ -69,6 +81,7 @@ export function RemoteSkillLibraryModal({
   const resetState = useCallback(() => {
     setRealUrl(SKILLHUB_HOME);
     setDownloadUrl(null);
+    setDownloadName(null);
   }, []);
 
   useEffect(() => {
@@ -86,7 +99,9 @@ export function RemoteSkillLibraryModal({
       if (nextDisplay) setRealUrl(nextDisplay);
 
       if (data.type === "skillhub:route-change" && typeof data.route === "string") {
-        setDownloadUrl(parseDownloadUrlFromRoute(data.route));
+        const parsed = parseDownloadUrlFromRoute(data.route);
+        setDownloadUrl(parsed?.downloadUrl ?? null);
+        setDownloadName(parsed?.downloadName ?? null);
       }
     };
 
@@ -94,11 +109,82 @@ export function RemoteSkillLibraryModal({
     return () => window.removeEventListener("message", onMessage);
   }, [open, resetState]);
 
-  const handleDownload = () => {
+  const handleDownload = useCallback(async () => {
     if (!downloadUrl) return;
-    // Direct file URL from SkillHub — open like entering it in the address bar.
-    window.open(downloadUrl, "_blank", "noopener,noreferrer");
-  };
+    if (downloading) return;
+
+    const target_name = "download"; // hard-coded by requirement
+    setDownloading(true);
+    try {
+      const resp = await fetch(getApiUrl("/download"), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...buildAuthHeaders(),
+        },
+        body: JSON.stringify({
+          zip_url: downloadUrl,
+          enable: true,
+          target_name,
+        }),
+      });
+
+      if (!resp.ok) {
+        const text = await resp.text().catch(() => "");
+        throw new Error(text || `Download request failed: ${resp.status}`);
+      }
+
+      const contentType = resp.headers.get("content-type") || "";
+
+      // Most likely: backend returns the zip as a binary attachment.
+      const looksLikeZip =
+        contentType.includes("application/zip") ||
+        contentType.includes("application/octet-stream") ||
+        (resp.headers.get("content-disposition") || "").includes("attachment");
+
+      if (looksLikeZip) {
+        const blob = await resp.blob();
+        const url = window.URL.createObjectURL(blob);
+
+        // Prefer filename from skillhub route `name=`; fallback to backend headers; then to target_name.
+        const preferredName = downloadName?.trim();
+        let filename = preferredName || target_name;
+        if (!preferredName) {
+          const cd = resp.headers.get("content-disposition") || "";
+          const filenameMatch = cd.match(
+            /filename\*?=(?:UTF-8'')?["']?([^"';\n]+)["']?/i,
+          );
+          if (filenameMatch?.[1]) {
+            filename = decodeURIComponent(filenameMatch[1]);
+          }
+        }
+
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+        return;
+      }
+
+      // Fallback: some APIs return JSON containing a downloadable URL.
+      const data = await resp.json().catch(() => null);
+      const downloadLink =
+        data?.url || data?.download_url || data?.downloadUrl || null;
+      if (typeof downloadLink === "string" && downloadLink) {
+        window.open(downloadLink, "_blank", "noopener,noreferrer");
+        return;
+      }
+
+      throw new Error("Unexpected download response format.");
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : String(err));
+    } finally {
+      setDownloading(false);
+    }
+  }, [downloading, downloadUrl, downloadName, message]);
 
   return (
     <Modal
@@ -115,7 +201,7 @@ export function RemoteSkillLibraryModal({
           <Button
             type="primary"
             icon={<DownloadOutlined />}
-            disabled={!downloadUrl}
+            disabled={!downloadUrl || downloading}
             onClick={handleDownload}
           >
             {t("common.download")}
