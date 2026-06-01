@@ -228,6 +228,8 @@
     "description": "管理智能体技能和能力。",
     "importHub": "导入 Hub",
     "remoteSkillLibrary": "远程技能库",
+    "remoteSkillLibraryHint": "支持通过远程技能库将技能下载到本地导入到当前工作区",
+    "remoteSkillLibraryDownload": "下载并导入",
     "importHubHint": "通过支持的 Hub URL 将技能导入到当前工作区",
     "importSkills": "导入技能",
     "enterSkillUrl": "输入技能URL",

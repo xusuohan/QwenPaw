@@ -370,6 +370,8 @@
     "description": "Manage agent skills and capabilities.",
     "importHub": "Importar Hub",
     "remoteSkillLibrary": "Biblioteca remota de skills",
+    "remoteSkillLibraryHint": "Baixe skills da biblioteca remota e importe-as para o workspace atual",
+    "remoteSkillLibraryDownload": "Baixar e importar",
     "importHubHint": "Import a skill from a supported online hub URL into the current workspace",
     "importSkills": "Importar Skill",
     "enterSkillUrl": "Enter Skill URL",

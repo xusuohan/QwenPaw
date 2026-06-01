@@ -14,6 +14,7 @@ export {
 } from "@/utils/skill";
 export { useConflictRenameModal } from "./useConflictRenameModal";
 export { ImportHubModal } from "./ImportHubModal";
+export { RemoteSkillLibraryModal } from "./RemoteSkillLibraryModal";
 export { PoolTransferModal } from "./PoolTransferModal";
 export { SkillFilterDropdown, TAG_PREFIX } from "./SkillFilterDropdown";
 export { HeaderActions } from "./HeaderActions";

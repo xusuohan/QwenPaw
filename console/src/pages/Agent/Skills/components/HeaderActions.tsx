@@ -166,7 +166,7 @@ export function HeaderActions({
                 {t("skills.uploadZip")}
               </Button>
             </Tooltip>
-            <Tooltip title={t("skills.importHubHint")}>
+            <Tooltip title={t("skills.remoteSkillLibraryHint")}>
               <Button
                 type="default"
                 className={styles.creationActionButton}
