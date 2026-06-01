@@ -136,9 +136,6 @@ export function RemoteSkillLibraryModal({
         throw new Error(text || `Download request failed: ${resp.status}`);
       }
 
-      // Refresh skill list once backend accepts the request.
-      await onDownloadSuccess?.();
-
       const contentType = resp.headers.get("content-type") || "";
 
       // Most likely: backend returns the zip as a binary attachment.
@@ -171,6 +168,9 @@ export function RemoteSkillLibraryModal({
         a.click();
         a.remove();
         window.URL.revokeObjectURL(url);
+
+        // Refresh skill list after download is fully processed.
+        await onDownloadSuccess?.();
         return;
       }
 
@@ -180,11 +180,15 @@ export function RemoteSkillLibraryModal({
         data?.url || data?.download_url || data?.downloadUrl || null;
       if (typeof downloadLink === "string" && downloadLink) {
         window.open(downloadLink, "_blank", "noopener,noreferrer");
+        await onDownloadSuccess?.();
         return;
       }
 
-      // Async backend mode: request accepted and processed server-side.
-      message.success(t("common.success"));
+      // Async backend mode: request accepted but processed server-side.
+      // Delay refresh to give the backend time to finish writing the skill.
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      await onDownloadSuccess?.();
+      message.success(t("skills.remoteSkillLibraryDownloadSuccess"));
     } catch (err) {
       message.error(err instanceof Error ? err.message : String(err));
     } finally {

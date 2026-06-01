@@ -230,6 +230,7 @@
     "remoteSkillLibrary": "远程技能库",
     "remoteSkillLibraryHint": "支持通过远程技能库将技能下载到本地导入到当前工作区",
     "remoteSkillLibraryDownload": "下载并导入",
+    "remoteSkillLibraryDownloadSuccess": "技能下载成功，已导入到当前工作区",
     "importHubHint": "通过支持的 Hub URL 将技能导入到当前工作区",
     "importSkills": "导入技能",
     "enterSkillUrl": "输入技能URL",

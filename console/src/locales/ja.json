@@ -188,6 +188,7 @@
     "remoteSkillLibrary": "リモートスキルライブラリ",
     "remoteSkillLibraryHint": "リモートスキルライブラリからスキルをダウンロードし、現在のワークスペースにインポートできます",
     "remoteSkillLibraryDownload": "ダウンロードしてインポート",
+    "remoteSkillLibraryDownloadSuccess": "スキルをダウンロードし、現在のワークスペースにインポートしました",
     "importHubHint": "サポートされている Hub URL から現在のワークスペースにスキルを取り込みます",
     "importSkills": "スキルをインポート",
     "enterSkillUrl": "スキルのURLを入力",

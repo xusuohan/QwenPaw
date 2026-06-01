@@ -188,6 +188,7 @@
     "remoteSkillLibrary": "Удалённая библиотека навыков",
     "remoteSkillLibraryHint": "Загружайте навыки из удалённой библиотеки и импортируйте их в текущее рабочее пространство",
     "remoteSkillLibraryDownload": "Скачать и импортировать",
+    "remoteSkillLibraryDownloadSuccess": "Навык успешно скачан и импортирован в текущее рабочее пространство",
     "importHubHint": "Импортировать навык из поддерживаемого Hub URL в текущее рабочее пространство",
     "importSkills": "Импорт навыка",
     "enterSkillUrl": "Введите URL навыка",

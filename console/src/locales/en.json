@@ -374,6 +374,7 @@
     "remoteSkillLibrary": "Remote Skill Library",
     "remoteSkillLibraryHint": "Download skills from the remote skill library and import them into the current workspace",
     "remoteSkillLibraryDownload": "Download & import",
+    "remoteSkillLibraryDownloadSuccess": "Skill downloaded and imported into the current workspace",
     "importHubHint": "Import a skill from a supported online hub URL into the current workspace",
     "importSkills": "Import Skill",
     "enterSkillUrl": "Enter Skill URL",
