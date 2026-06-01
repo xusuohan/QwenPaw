@@ -113,10 +113,10 @@ export function RemoteSkillLibraryModal({
     if (!downloadUrl) return;
     if (downloading) return;
 
-    const target_name = "download"; // hard-coded by requirement
+    const target_name = downloadName?.trim() || "download";
     setDownloading(true);
     try {
-      const resp = await fetch(getApiUrl("/download"), {
+      const resp = await fetch(getApiUrl("/skills/download"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -178,13 +178,14 @@ export function RemoteSkillLibraryModal({
         return;
       }
 
-      throw new Error("Unexpected download response format.");
+      // Async backend mode: request accepted and processed server-side.
+      message.success(t("common.success"));
     } catch (err) {
       message.error(err instanceof Error ? err.message : String(err));
     } finally {
       setDownloading(false);
     }
-  }, [downloading, downloadUrl, downloadName, message]);
+  }, [downloading, downloadUrl, downloadName, message, t]);
 
   return (
     <Modal
