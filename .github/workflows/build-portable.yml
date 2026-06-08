@@ -1,0 +1,213 @@
+# Build portable version for all platforms
+# Triggered on release publish or manual dispatch
+
+name: Build Portable Version
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to build (optional, defaults to __version__.py)'
+        required: false
+        type: string
+
+# Cancel in-progress runs for the same workflow
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ============================================================================
+  # Build macOS portable version
+  # ============================================================================
+  build-macos:
+    name: Build macOS (Apple Silicon)
+    runs-on: macos-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Miniconda
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          miniconda-version: "latest"
+          activate-environment: ""
+          auto-activate-base: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: console/package-lock.json
+
+      - name: Install npm dependencies
+        run: cd console && npm ci
+
+      - name: Build portable version
+        run: |
+          source "$CONDA/bin/activate"
+          bash ./scripts/pack/build_portable.sh
+        env:
+          DIST: dist
+
+      - name: Verify build output
+        run: |
+          ls -la dist/QwenPaw-Portable/
+          ls -la dist/QwenPaw-Portable/macOS/
+          du -sh dist/QwenPaw-Portable/
+
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: QwenPaw-Portable-macOS
+          path: dist/QwenPaw-Portable/
+          retention-days: 7
+
+  # ============================================================================
+  # Build Linux portable version
+  # ============================================================================
+  build-linux:
+    name: Build Linux (x86_64)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Miniconda
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          miniconda-version: "latest"
+          activate-environment: ""
+          auto-activate-base: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: console/package-lock.json
+
+      - name: Install npm dependencies
+        run: cd console && npm ci
+
+      - name: Build portable version
+        run: |
+          source "$CONDA/bin/activate"
+          bash ./scripts/pack/build_portable.sh
+        env:
+          DIST: dist
+
+      - name: Verify build output
+        run: |
+          ls -la dist/QwenPaw-Portable/
+          ls -la dist/QwenPaw-Portable/linux/
+          du -sh dist/QwenPaw-Portable/
+
+      - name: Upload Linux artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: QwenPaw-Portable-Linux
+          path: dist/QwenPaw-Portable/
+          retention-days: 7
+
+  # ============================================================================
+  # Build Windows portable version
+  # ============================================================================
+  build-windows:
+    name: Build Windows (x86_64)
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Miniconda
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          miniconda-version: "latest"
+          activate-environment: ""
+          auto-activate-base: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: console/package-lock.json
+
+      - name: Install npm dependencies
+        run: cd console && npm ci
+
+      - name: Install NSIS
+        run: choco install nsis -y
+
+      - name: Build Windows version
+        run: |
+          conda activate base
+          .\scripts\pack\build_win.ps1
+        env:
+          DIST: dist
+        shell: powershell
+
+      - name: Verify build output
+        run: |
+          Get-ChildItem -Path dist -Recurse | Select-Object FullName, Length
+        shell: powershell
+
+      - name: Upload Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: QwenPaw-Setup-Windows
+          path: dist/QwenPaw-Setup-*.exe
+          retention-days: 7
+
+  # ============================================================================
+  # Create release with all artifacts
+  # ============================================================================
+  create-release:
+    name: Create Release
+    needs: [build-macos, build-linux, build-windows]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'release'
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: List artifacts
+        run: |
+          ls -la artifacts/
+          du -sh artifacts/*
+
+      - name: Create portable archive (macOS)
+        run: |
+          cd artifacts/QwenPaw-Portable-macOS
+          tar -czf ../../QwenPaw-Portable-macOS.tar.gz .
+
+      - name: Create portable archive (Linux)
+        run: |
+          cd artifacts/QwenPaw-Portable-Linux
+          tar -czf ../../QwenPaw-Portable-Linux.tar.gz .
+
+      - name: Upload release assets
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            QwenPaw-Portable-macOS.tar.gz
+            QwenPaw-Portable-Linux.tar.gz
+            artifacts/QwenPaw-Setup-Windows/*.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
