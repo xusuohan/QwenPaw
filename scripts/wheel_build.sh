@@ -20,8 +20,13 @@ mkdir -p "$CONSOLE_DEST"
 cp -R "$CONSOLE_DIR/dist/"* "$CONSOLE_DEST/"
 
 echo "[wheel_build] Building wheel + sdist..."
-python3 -m pip install --quiet build
+# Use a temporary venv to avoid PEP 668 restrictions on system Python
+BUILD_VENV="$REPO_ROOT/.build_venv"
+if [ ! -d "$BUILD_VENV" ]; then
+  python3 -m venv "$BUILD_VENV"
+fi
+"$BUILD_VENV/bin/pip" install --quiet build
 rm -rf dist/*
-python3 -m build --outdir dist .
+"$BUILD_VENV/bin/python" -m build --outdir dist .
 
 echo "[wheel_build] Done. Wheel(s) in: $REPO_ROOT/dist/"

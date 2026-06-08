@@ -98,6 +98,7 @@ CLAUDE.md
 
 # Build cache
 .cache/
+.build_venv/
 
 # Local runtime data (generated at runtime, do not commit)
 .qwenpaw_data/

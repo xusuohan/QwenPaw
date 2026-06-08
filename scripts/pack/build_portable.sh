@@ -9,10 +9,10 @@ PORTABLE_DIR="${DIST}/QwenPaw-Portable"
 
 echo "== Building portable version =="
 
-# 创建 U 盘目录结构
-mkdir -p "${PORTABLE_DIR}/data"
+# 清理历史残留
+rm -rf "${PORTABLE_DIR}"
 
-# 根据当前平台构建
+# 根据当前平台构建（必须先构建，因为 wheel_build.sh 会清理 dist/）
 case "$(uname -s)" in
   Darwin*)
     echo "Building macOS version..."
@@ -32,6 +32,9 @@ case "$(uname -s)" in
     exit 1
     ;;
 esac
+
+# 创建 U 盘数据目录（构建完成后再创建，避免被 wheel_build.sh 清理）
+mkdir -p "${PORTABLE_DIR}/data"
 
 # 创建 README
 cat > "${PORTABLE_DIR}/README.txt" << 'README'
@@ -70,6 +73,8 @@ rm -f "${DIST}"/qwenpaw-*.whl
 rm -f "${DIST}"/qwenpaw-*.tar.gz
 rm -f "${DIST}"/.DS_Store
 rm -rf "${DIST}/data"
+# 清理便携版目录中的 .DS_Store
+find "${PORTABLE_DIR}" -name ".DS_Store" -delete 2>/dev/null || true
 echo "== dist/ cleaned =="
 
 echo "== Portable version built at ${PORTABLE_DIR} =="

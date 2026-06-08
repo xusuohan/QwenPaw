@@ -54,3 +54,11 @@ test-channel-contract:
 # BaseChannel core unit tests (optional, not enforced)
 test-base-core:
 	$(PYTEST) tests/unit/channels/test_base_core.py -v
+
+# Build portable version (USB plug-and-play)
+portable:
+	bash scripts/pack/build_portable.sh
+
+# Build macOS desktop app
+desktop-macos:
+	bash scripts/pack/build_macos.sh
