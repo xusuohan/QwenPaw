@@ -70,8 +70,7 @@ desktop-linux:
 
 # Build Windows portable (PowerShell, run on Windows)
 desktop-windows:
-	@echo "Windows build requires PowerShell. Run on Windows:"
-	@echo "  powershell -ExecutionPolicy Bypass -File scripts/pack/build_win.ps1"
+	powershell -ExecutionPolicy Bypass -File scripts/pack/build_win.ps1
 
 # Build for all platforms (current platform only, cross-build not supported)
 build-all:
