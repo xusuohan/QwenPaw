@@ -163,17 +163,6 @@ $LauncherBat = Join-Path $EnvRoot "QwenPaw Desktop.bat"
 @echo off
 cd /d "%~dp0"
 
-REM 获取 U 盘根目录（从 windows\env 向上两级）
-set "USB_ROOT=%~dp0..\.."
-
-REM 检测是否在 U 盘环境中运行
-if exist "%USB_ROOT%\data" (
-    REM U 盘模式：数据存储在 U 盘
-    set "QWENPAW_WORKING_DIR=%USB_ROOT%\data"
-    set "QWENPAW_SECRET_DIR=%USB_ROOT%\data\.secret"
-    set "QWENPAW_BACKUP_DIR=%USB_ROOT%\data\.backups"
-)
-
 REM Isolate packaged Python from user site-packages to prevent conflicts
 set "PYTHONNOUSERSITE=1"
 
@@ -198,13 +187,7 @@ if defined CERT_FILE (
   )
 )
 
-REM 检查配置文件是否存在
-if not defined QWENPAW_WORKING_DIR (
-  set "CONFIG_FILE=%USERPROFILE%\.qwenpaw\config.json"
-) else (
-  set "CONFIG_FILE=%QWENPAW_WORKING_DIR%\config.json"
-)
-if not exist "%CONFIG_FILE%" (
+if not exist "%USERPROFILE%\.qwenpaw\config.json" (
   "%~dp0python.exe" -u -m qwenpaw init --defaults --accept-security
 )
 "%~dp0python.exe" -u -m qwenpaw desktop --log-level %QWENPAW_LOG_LEVEL%
@@ -215,17 +198,6 @@ $DebugBat = Join-Path $EnvRoot "QwenPaw Desktop (Debug).bat"
 @"
 @echo off
 cd /d "%~dp0"
-
-REM 获取 U 盘根目录（从 windows\env 向上两级）
-set "USB_ROOT=%~dp0..\.."
-
-REM 检测是否在 U 盘环境中运行
-if exist "%USB_ROOT%\data" (
-    REM U 盘模式：数据存储在 U 盘
-    set "QWENPAW_WORKING_DIR=%USB_ROOT%\data"
-    set "QWENPAW_SECRET_DIR=%USB_ROOT%\data\.secret"
-    set "QWENPAW_BACKUP_DIR=%USB_ROOT%\data\.backups"
-)
 
 REM Isolate packaged Python from user site-packages to prevent conflicts
 set "PYTHONNOUSERSITE=1"
@@ -255,8 +227,6 @@ echo ====================================
 echo QwenPaw Desktop - Debug Mode
 echo ====================================
 echo Working Directory: %cd%
-echo USB_ROOT: %USB_ROOT%
-echo QWENPAW_WORKING_DIR: %QWENPAW_WORKING_DIR%
 echo Python: "%~dp0python.exe"
 echo PATH: %PATH%
 echo PYTHONNOUSERSITE: %PYTHONNOUSERSITE%
@@ -265,14 +235,7 @@ echo SSL_CERT_FILE: %SSL_CERT_FILE%
 echo REQUESTS_CA_BUNDLE: %REQUESTS_CA_BUNDLE%
 echo CURL_CA_BUNDLE: %CURL_CA_BUNDLE%
 echo.
-
-REM 检查配置文件是否存在
-if not defined QWENPAW_WORKING_DIR (
-  set "CONFIG_FILE=%USERPROFILE%\.qwenpaw\config.json"
-) else (
-  set "CONFIG_FILE=%QWENPAW_WORKING_DIR%\config.json"
-)
-if not exist "%CONFIG_FILE%" (
+if not exist "%USERPROFILE%\.qwenpaw\config.json" (
   echo [Init] Creating config...
   "%~dp0python.exe" -u -m qwenpaw init --defaults --accept-security
 )
