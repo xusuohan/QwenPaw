@@ -36,25 +36,30 @@ esac
 # 创建 U 盘数据目录（构建完成后再创建，避免被 wheel_build.sh 清理）
 mkdir -p "${PORTABLE_DIR}/data"
 
-# 创建 README
-cat > "${PORTABLE_DIR}/README.txt" << 'README'
+# 创建 README（根据实际构建平台生成）
+PLATFORM_NAME="Unknown"
+case "$(uname -s)" in
+  Darwin*) PLATFORM_NAME="macOS" ;;
+  Linux*)  PLATFORM_NAME="Linux" ;;
+esac
+
+cat > "${PORTABLE_DIR}/README.txt" << README
 QwenPaw Portable
 ================
 
+构建平台: ${PLATFORM_NAME}
+
 使用说明：
 1. 将此文件夹复制到 U 盘
-2. 根据操作系统运行对应程序：
+2. 运行对应程序：
    - macOS: 运行 macOS/QwenPaw.app
    - Linux: 运行 linux/start.sh
-   - Windows: 运行 windows/QwenPaw Desktop.vbs
 
 所有数据存储在 data/ 目录，可在不同电脑间携带。
 
 目录结构：
-├── macOS/          # macOS 桌面应用
-├── linux/          # Linux 启动脚本和环境
-├── windows/        # Windows 启动脚本和环境
-└── data/           # 共享数据目录
+├── ${PLATFORM_NAME}/  # 桌面应用
+└── data/             # 共享数据目录
     ├── config.json
     ├── workspaces/
     ├── memory/
@@ -62,8 +67,8 @@ QwenPaw Portable
 
 注意事项：
 - 首次运行会自动初始化配置
-- 所有平台共享同一个 data/ 目录
 - 建议 U 盘容量 8GB 或以上
+- 需要在目标平台分别构建对应版本
 README
 
 # 清理 dist 中的中间产物，只保留便携版目录

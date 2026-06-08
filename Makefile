@@ -56,7 +56,7 @@ test-channel-contract:
 test-base-core:
 	$(PYTEST) tests/unit/channels/test_base_core.py -v
 
-# Build portable version (USB plug-and-play)
+# Build portable version for current platform (USB plug-and-play)
 portable:
 	bash scripts/pack/build_portable.sh
 
