@@ -35,8 +35,14 @@ CONDA_UNPACK_AFFECTED_PACKAGES = [
 def _conda_exe() -> str:
     """Resolve conda executable (required on Windows where 'conda' is a batch)."""
     exe = os.environ.get("CONDA_EXE")
-    if exe:
+    if exe and Path(exe).exists():
         return exe
+    # On Windows, try conda.exe first (avoids batch-file resolution issues)
+    if sys.platform == "win32":
+        import shutil
+        for name in ("conda.exe", "conda.bat", "conda.cmd", "conda"):
+            if shutil.which(name):
+                return name
     return "conda"
 
 
@@ -49,7 +55,11 @@ def _run(
     run_env = os.environ.copy()
     if env:
         run_env.update(env)
-    subprocess.run(cmd, cwd=cwd or REPO_ROOT, env=run_env, check=True)
+    # Windows: conda/pip are batch/cmd files, need shell=True to resolve
+    use_shell = sys.platform == "win32"
+    subprocess.run(
+        cmd, cwd=cwd or REPO_ROOT, env=run_env, check=True, shell=use_shell,
+    )
 
 
 def _pick_wheel(wheel_arg: str | None) -> Path:
