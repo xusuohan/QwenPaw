@@ -29,12 +29,24 @@ $ConsoleDist = Join-Path $ConsoleDir "dist"
 Copy-Item -Path (Join-Path $ConsoleDist "*") -Destination $ConsoleDest -Recurse -Force
 
 Write-Host "[wheel_build] Building wheel + sdist..."
-python -m pip install --quiet build
+
+# Detect Python: prefer py launcher, then python3, then python
+$PythonCmd = $null
+foreach ($cmd in @("py", "python3", "python")) {
+  $null = & $cmd --version 2>&1
+  if ($LASTEXITCODE -eq 0) { $PythonCmd = $cmd; break }
+}
+if (-not $PythonCmd) {
+  throw "Python not found. Install Python 3.8+ and ensure 'python' or 'py' is in PATH."
+}
+Write-Host "[wheel_build] Using Python: $PythonCmd"
+
+& $PythonCmd -m pip install --quiet build
 $DistDir = Join-Path $RepoRoot "dist"
 if (Test-Path $DistDir) {
   Remove-Item -Path (Join-Path $DistDir "*") -Force -ErrorAction SilentlyContinue
 }
-python -m build --outdir dist .
-if ($LASTEXITCODE -ne 0) { throw "python -m build failed with exit code $LASTEXITCODE" }
+& $PythonCmd -m build --outdir dist .
+if ($LASTEXITCODE -ne 0) { throw "$PythonCmd -m build failed with exit code $LASTEXITCODE" }
 
 Write-Host "[wheel_build] Done. Wheel(s) in: $RepoRoot\dist\"

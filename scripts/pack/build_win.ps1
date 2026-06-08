@@ -57,7 +57,18 @@ if ($RunWheelBuild) {
 }
 
 Write-Host "== Building conda-packed env =="
-& python $PackDir\build_common.py --output $Archive --format zip --cache-wheels
+# Detect Python: prefer py launcher, then python3, then python
+$PythonCmd = $null
+foreach ($cmd in @("py", "python3", "python")) {
+  $null = & $cmd --version 2>&1
+  if ($LASTEXITCODE -eq 0) { $PythonCmd = $cmd; break }
+}
+if (-not $PythonCmd) {
+  throw "Python not found. Install Python 3.8+ and ensure 'python' or 'py' is in PATH."
+}
+Write-Host "[build_win] Using Python: $PythonCmd"
+
+& $PythonCmd $PackDir\build_common.py --output $Archive --format zip --cache-wheels
 if ($LASTEXITCODE -ne 0) {
   throw "build_common.py failed with exit code $LASTEXITCODE"
 }
