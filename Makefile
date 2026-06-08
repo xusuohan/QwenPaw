@@ -1,6 +1,7 @@
 # CoPaw Test & Coverage Makefile
 
-.PHONY: test test-unit test-contract test-integration test-channel test-channel-contract coverage-full clean
+.PHONY: test test-unit test-contract test-integration test-channel test-channel-contract coverage-full clean \
+       portable desktop-macos desktop-linux desktop-windows build-all dist-clean
 
 # Python path
 PYTHON := python
@@ -59,6 +60,30 @@ test-base-core:
 portable:
 	bash scripts/pack/build_portable.sh
 
-# Build macOS desktop app
+# Build macOS desktop app (.app bundle)
 desktop-macos:
 	bash scripts/pack/build_macos.sh
+
+# Build Linux portable (Ubuntu/Debian/etc.)
+desktop-linux:
+	bash scripts/pack/build_linux.sh
+
+# Build Windows portable (PowerShell, run on Windows)
+desktop-windows:
+	@echo "Windows build requires PowerShell. Run on Windows:"
+	@echo "  powershell -ExecutionPolicy Bypass -File scripts/pack/build_win.ps1"
+
+# Build for all platforms (current platform only, cross-build not supported)
+build-all:
+	@echo "Building for current platform..."
+	@case "$$(uname -s)" in \
+		Darwin) $(MAKE) desktop-macos ;; \
+		Linux)  $(MAKE) desktop-linux ;; \
+		*)      echo "Unsupported platform: $$(uname -s)"; exit 1 ;; \
+	esac
+
+# Clean build artifacts
+dist-clean:
+	rm -rf dist/
+	rm -rf .build_venv/
+	rm -rf .cache/conda_envs/
