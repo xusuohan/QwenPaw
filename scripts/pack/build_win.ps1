@@ -6,6 +6,58 @@ $RepoRoot = (Get-Item $PSScriptRoot).Parent.Parent.FullName
 Set-Location $RepoRoot
 Write-Host "[build_win] REPO_ROOT=$RepoRoot"
 $PackDir = $PSScriptRoot
+
+# --- Environment check ---
+Write-Host "== Checking build environment =="
+$_missing = 0
+
+function Check-Cmd($cmd, $name, $hint) {
+  try {
+    $ver = & $cmd --version 2>&1 | Select-Object -First 1
+    Write-Host "  [OK] $name`: $ver"
+  } catch {
+    Write-Host "  [MISSING] $name ('$cmd' not found in PATH)" -ForegroundColor Red
+    if ($hint) { Write-Host "           -> $hint" -ForegroundColor Yellow }
+    $script:_missing = 1
+  }
+}
+
+Check-Cmd "node" "Node.js" "Install Node.js 18+: https://nodejs.org/"
+Check-Cmd "npm" "npm" "Comes with Node.js. If missing, reinstall Node.js."
+Check-Cmd "conda" "Conda" "Install Miniconda: https://docs.conda.io/en/latest/miniconda.html"
+
+# Python: try py, python3, python
+$script:PythonCmd = $null
+foreach ($cmd in @("py", "python3", "python")) {
+  try {
+    $null = & $cmd --version 2>&1
+    $script:PythonCmd = $cmd
+    $ver = & $cmd --version 2>&1 | Select-Object -First 1
+    Write-Host "  [OK] Python ($cmd)`: $ver"
+    break
+  } catch {}
+}
+if (-not $script:PythonCmd) {
+  Write-Host "  [MISSING] Python ('py'/'python3'/'python' not found in PATH)" -ForegroundColor Red
+  Write-Host "           -> Install Python 3.8+: https://www.python.org/downloads/" -ForegroundColor Yellow
+  $script:_missing = 1
+}
+
+# NSIS (optional for portable build, required for installer)
+$nsisFound = $false
+try {
+  $null = Get-Command makensis -ErrorAction Stop
+  $nsisFound = $true
+  Write-Host "  [OK] NSIS (makensis)"
+} catch {
+  Write-Host "  [WARN] NSIS (makensis) not found - installer build will be skipped" -ForegroundColor Yellow
+}
+
+if ($script:_missing -ne 0) {
+  throw "Missing required tools. Please install them before building."
+}
+Write-Host "== All build dependencies found =="
+# --- End environment check ---
 $Dist = if ($env:DIST) { $env:DIST } else { "dist" }
 $Archive = Join-Path $Dist "qwenpaw-env.zip"
 $Unpacked = Join-Path $Dist "win-unpacked"

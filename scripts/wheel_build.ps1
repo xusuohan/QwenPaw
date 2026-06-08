@@ -5,6 +5,44 @@ $ErrorActionPreference = "Stop"
 $RepoRoot = (Get-Item $PSScriptRoot).Parent.FullName
 Set-Location $RepoRoot
 
+# --- Environment check ---
+Write-Host "== Checking build environment =="
+$_missing = 0
+
+# Node.js / npm
+foreach ($pair in @(@("node","Node.js","Install Node.js 18+: https://nodejs.org/"), @("npm","npm","Comes with Node.js"))) {
+  $cmd, $name, $hint = $pair
+  try {
+    $ver = & $cmd --version 2>&1 | Select-Object -First 1
+    Write-Host "  [OK] $name`: $ver"
+  } catch {
+    Write-Host "  [MISSING] $name ('$cmd' not found)" -ForegroundColor Red
+    Write-Host "           -> $hint" -ForegroundColor Yellow
+    $_missing = 1
+  }
+}
+
+# Python
+$PythonCmd = $null
+foreach ($cmd in @("py", "python3", "python")) {
+  try {
+    $null = & $cmd --version 2>&1
+    $PythonCmd = $cmd
+    $ver = & $cmd --version 2>&1 | Select-Object -First 1
+    Write-Host "  [OK] Python ($cmd)`: $ver"
+    break
+  } catch {}
+}
+if (-not $PythonCmd) {
+  Write-Host "  [MISSING] Python" -ForegroundColor Red
+  Write-Host "           -> Install Python 3.8+: https://www.python.org/downloads/" -ForegroundColor Yellow
+  $_missing = 1
+}
+
+if ($_missing -ne 0) { throw "Missing required tools. Please install them before building." }
+Write-Host "== All build dependencies found =="
+# --- End environment check ---
+
 $ConsoleDir = Join-Path $RepoRoot "console"
 $ConsoleDest = Join-Path $RepoRoot "src\qwenpaw\console"
 

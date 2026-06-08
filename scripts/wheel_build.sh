@@ -6,6 +6,9 @@ set -e
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
+# 检测构建环境
+source "${REPO_ROOT}/scripts/pack/check_env.sh"
+
 CONSOLE_DIR="$REPO_ROOT/console"
 CONSOLE_DEST="$REPO_ROOT/src/qwenpaw/console"
 

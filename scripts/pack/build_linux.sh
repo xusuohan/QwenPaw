@@ -6,6 +6,9 @@ set -eo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$REPO_ROOT"
 PACK_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# 检测构建环境
+source "${PACK_DIR}/check_env.sh"
 DIST="${DIST:-dist}"
 ARCHIVE="${DIST}/qwenpaw-env-linux.tar.gz"
 
