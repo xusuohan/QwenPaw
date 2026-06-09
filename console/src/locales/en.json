@@ -63,7 +63,9 @@
     "voiceTranscription": "Voice Transcription",
     "debug": "Debug",
     "plugins": "Plugins",
-    "backups": "Backups"
+    "backups": "Backups",
+    "showAdvancedMenus": "Show more menus",
+    "hideAdvancedMenus": "Hide more menus"
   },
   "debug": {
     "title": "Debug",
@@ -369,6 +371,10 @@
     "title": "Skills",
     "description": "Manage agent skills and capabilities.",
     "importHub": "Import Hub",
+    "remoteSkillLibrary": "Remote Skill Library",
+    "remoteSkillLibraryHint": "Download skills from the remote skill library and import them into the current workspace",
+    "remoteSkillLibraryDownload": "Download & import",
+    "remoteSkillLibraryDownloadSuccess": "Skill downloaded and imported into the current workspace",
     "importHubHint": "Import a skill from a supported online hub URL into the current workspace",
     "importSkills": "Import Skill",
     "enterSkillUrl": "Enter Skill URL",

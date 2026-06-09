@@ -14,6 +14,7 @@ import {
 } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
 import { ImportHubModal } from "../../Agent/Skills/components/ImportHubModal";
+import { RemoteSkillLibraryModal } from "../../Agent/Skills/components/RemoteSkillLibraryModal";
 import { SkillFilterDropdown } from "../../Agent/Skills/components/SkillFilterDropdown";
 import {
   BroadcastModal,
@@ -139,13 +140,22 @@ function SkillPoolPage() {
                       {t("skills.uploadZip")}
                     </Button>
                   </Tooltip>
-                  <Tooltip title={t("skillPool.importHubHint")}>
+                  {/* <Tooltip title={t("skillPool.importHubHint")}>
                     <Button
                       type="default"
                       icon={<ImportOutlined />}
                       onClick={() => pool.setImportModalOpen(true)}
                     >
                       {t("skills.importHub")}
+                    </Button>
+                  </Tooltip> */}
+                  <Tooltip title={t("skills.remoteSkillLibraryHint")}>
+                    <Button
+                      type="default"
+                      icon={<ImportOutlined />}
+                      onClick={pool.openRemoteLibrary}
+                    >
+                      {t("skills.remoteSkillLibrary")}
                     </Button>
                   </Tooltip>
                   <Button type="primary" onClick={pool.toggleBatchMode}>
@@ -322,6 +332,12 @@ function SkillPoolPage() {
         onConfigTextChange={pool.setConfigText}
         onChangeBuiltinLanguage={pool.handleBuiltinLanguageSwitch}
         validateFrontmatter={pool.validateFrontmatter}
+      />
+
+      <RemoteSkillLibraryModal
+        open={pool.remoteLibraryOpen}
+        onCancel={pool.closeRemoteLibrary}
+        onDownloadSuccess={pool.handleRefresh}
       />
 
       {pool.conflictRenameModal}

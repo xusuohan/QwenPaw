@@ -166,14 +166,14 @@ export function HeaderActions({
                 {t("skills.uploadZip")}
               </Button>
             </Tooltip>
-            <Tooltip title={t("skills.importHubHint")}>
+            <Tooltip title={t("skills.remoteSkillLibraryHint")}>
               <Button
                 type="default"
                 className={styles.creationActionButton}
                 onClick={onImportHub}
                 icon={<ImportOutlined />}
               >
-                {t("skills.importHub")}
+                {t("skills.remoteSkillLibrary")}
               </Button>
             </Tooltip>
             <Button type="primary" onClick={onToggleBatchMode}>

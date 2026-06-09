@@ -9,6 +9,7 @@ from typing import Dict, List
 import logging
 import json
 
+
 from pydantic import BaseModel
 
 from agentscope.model import ChatModelBase
@@ -847,6 +848,17 @@ PROVIDER_MINIMAX_CN = AnthropicProvider(
     support_connection_check=False,
 )
 
+PROVIDER_OCTOKEN = OpenAIProvider(
+    id="octoken",
+    name="Octoken",
+    base_url="https://octoken.com.cn/v1",
+    api_key_prefix="",
+    models=[],
+    freeze_url=True,
+    support_model_discovery=True,
+    default_headers={"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"},
+)
+
 PROVIDER_KIMI_CN = OpenAIProvider(
     id="kimi-cn",
     name="Kimi (China)",
@@ -1004,33 +1016,34 @@ class ProviderManager:  # pylint: disable=too-many-public-methods
                 pass
 
     def _init_builtins(self):
-        self._add_builtin(PROVIDER_QWENPAW)
-        self._add_builtin(PROVIDER_OLLAMA)
-        self._add_builtin(PROVIDER_LMSTUDIO)
-        self._add_builtin(PROVIDER_OPENROUTER)
-        self._add_builtin(PROVIDER_MODELSCOPE)
-        self._add_builtin(PROVIDER_DASHSCOPE)
-        self._add_builtin(PROVIDER_ALIYUN_CODINGPLAN)
-        self._add_builtin(PROVIDER_ALIYUN_CODINGPLAN_INTL)
-        self._add_builtin(PROVIDER_ALIYUN_TOKENPLAN)
-        self._add_builtin(PROVIDER_OPENCODE)
-        self._add_builtin(PROVIDER_OPENAI)
-        self._add_builtin(PROVIDER_AZURE_OPENAI)
-        self._add_builtin(PROVIDER_ANTHROPIC)
-        self._add_builtin(PROVIDER_GEMINI)
-        self._add_builtin(PROVIDER_DEEPSEEK)
-        self._add_builtin(PROVIDER_KIMI_CN)
-        self._add_builtin(PROVIDER_KIMI_INTL)
-        self._add_builtin(PROVIDER_MINIMAX_CN)
-        self._add_builtin(PROVIDER_MINIMAX)
-        self._add_builtin(PROVIDER_ZHIPU_CN)
-        self._add_builtin(PROVIDER_ZHIPU_CN_CODINGPLAN)
-        self._add_builtin(PROVIDER_ZHIPU_INTL)
-        self._add_builtin(PROVIDER_ZHIPU_INTL_CODINGPLAN)
-        self._add_builtin(PROVIDER_SILICONFLOW_CN)
-        self._add_builtin(PROVIDER_SILICONFLOW_INTL)
-        self._add_builtin(PROVIDER_VOLCENGINE_CN)
-        self._add_builtin(PROVIDER_VOLCENGINE_CN_CODINGPLAN)
+        self._add_builtin(PROVIDER_OCTOKEN)
+        #self._add_builtin(PROVIDER_QWENPAW)
+        #self._add_builtin(PROVIDER_OLLAMA)
+        #self._add_builtin(PROVIDER_LMSTUDIO)
+        #self._add_builtin(PROVIDER_OPENROUTER)
+        #self._add_builtin(PROVIDER_MODELSCOPE)
+        #self._add_builtin(PROVIDER_DASHSCOPE)
+        #self._add_builtin(PROVIDER_ALIYUN_CODINGPLAN)
+        #self._add_builtin(PROVIDER_ALIYUN_CODINGPLAN_INTL)
+        #self._add_builtin(PROVIDER_ALIYUN_TOKENPLAN)
+        #self._add_builtin(PROVIDER_OPENCODE)
+        #self._add_builtin(PROVIDER_OPENAI)
+        #self._add_builtin(PROVIDER_AZURE_OPENAI)
+        #self._add_builtin(PROVIDER_ANTHROPIC)
+        #self._add_builtin(PROVIDER_GEMINI)
+        #self._add_builtin(PROVIDER_DEEPSEEK)
+        #self._add_builtin(PROVIDER_KIMI_CN)
+        #self._add_builtin(PROVIDER_KIMI_INTL)
+        #self._add_builtin(PROVIDER_MINIMAX_CN)
+        #self._add_builtin(PROVIDER_MINIMAX)
+        #self._add_builtin(PROVIDER_ZHIPU_CN)
+        #self._add_builtin(PROVIDER_ZHIPU_CN_CODINGPLAN)
+        #self._add_builtin(PROVIDER_ZHIPU_INTL)
+        #self._add_builtin(PROVIDER_ZHIPU_INTL_CODINGPLAN)
+        #self._add_builtin(PROVIDER_SILICONFLOW_CN)
+        #self._add_builtin(PROVIDER_SILICONFLOW_INTL)
+        #self._add_builtin(PROVIDER_VOLCENGINE_CN)
+        #self._add_builtin(PROVIDER_VOLCENGINE_CN_CODINGPLAN)
 
     def _add_builtin(self, provider: Provider):
         self.builtin_providers[provider.id] = provider
@@ -1080,11 +1093,11 @@ class ProviderManager:  # pylint: disable=too-many-public-methods
             provider_info = plugin_provider["info"]
             provider_class = plugin_provider["class"]
             # Instantiate with **dict unpacking for Pydantic BaseModel
-            return provider_class(**provider_info.model_dump())
+            return None##provider_class(**provider_info.model_dump())
         if provider_id in self.builtin_providers:
             return self.builtin_providers[provider_id]
         if provider_id in self.custom_providers:
-            return self.custom_providers[provider_id]
+            return None  #self.custom_providers[provider_id]
         return None
 
     async def get_provider_info(self, provider_id: str) -> ProviderInfo | None:

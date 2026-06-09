@@ -1,4 +1,5 @@
-import { Layout, Space, Badge, Spin, Tooltip } from "antd";
+// import { Layout, Space, Badge, Spin, Tooltip } from "antd";
+import { Layout, Space, Spin } from "antd";
 import LanguageSwitcher from "../components/LanguageSwitcher/index";
 import ThemeToggleButton from "../components/ThemeToggleButton";
 import { useTranslation } from "react-i18next";
@@ -6,13 +7,13 @@ import { Button, Modal } from "@agentscope-ai/design";
 import styles from "./index.module.less";
 import api from "../api";
 import {
-  GITHUB_URL,
-  getDocsUrl,
-  getFaqUrl,
+  // GITHUB_URL,
+  // getDocsUrl,
+  // getFaqUrl,
   getReleaseNotesUrl,
   PYPI_URL,
   ONE_HOUR_MS,
-  UPDATE_MD,
+  // UPDATE_MD,
   isStableVersion,
   compareVersions,
 } from "./constants";
@@ -55,7 +56,8 @@ export default function Header() {
   const [version, setVersion] = useState<string>("");
   const [latestVersion, setLatestVersion] = useState<string>("");
   const [updateModalOpen, setUpdateModalOpen] = useState(false);
-  const [updateMarkdown, setUpdateMarkdown] = useState<string>("");
+  // const [updateMarkdown, setUpdateMarkdown] = useState<string>("");
+  const [updateMarkdown] = useState<string>("");
 
   useEffect(() => {
     api
@@ -108,35 +110,35 @@ export default function Header() {
       .catch(() => {});
   }, []);
 
-  const hasUpdate =
-    !!version && !!latestVersion && compareVersions(latestVersion, version) > 0;
+  // const hasUpdate =
+  //   !!version && !!latestVersion && compareVersions(latestVersion, version) > 0;
 
-  const handleOpenUpdateModal = () => {
-    setUpdateMarkdown("");
-    setUpdateModalOpen(true);
-    const lang = i18n.language?.startsWith("zh")
-      ? "zh"
-      : i18n.language?.startsWith("ru")
-      ? "ru"
-      : "en";
-    const faqLang = lang === "zh" ? "zh" : "en";
-    const url = `https://qwenpaw.agentscope.io/docs/faq.${faqLang}.md`;
-    fetch(url, { cache: "no-cache" })
-      .then((res) => (res.ok ? res.text() : Promise.reject()))
-      .then((text) => {
-        const zhPattern = /###\s*QwenPaw如何更新[\s\S]*?(?=\n###|$)/;
-        const enPattern = /###\s*How to update QwenPaw[\s\S]*?(?=\n###|$)/;
-        const match = text.match(faqLang === "zh" ? zhPattern : enPattern);
-        setUpdateMarkdown(
-          match && lang !== "ru"
-            ? match[0].trim()
-            : UPDATE_MD[lang] ?? UPDATE_MD.en,
-        );
-      })
-      .catch(() => {
-        setUpdateMarkdown(UPDATE_MD[lang] ?? UPDATE_MD.en);
-      });
-  };
+  // const handleOpenUpdateModal = () => {
+  //   setUpdateMarkdown("");
+  //   setUpdateModalOpen(true);
+  //   const lang = i18n.language?.startsWith("zh")
+  //     ? "zh"
+  //     : i18n.language?.startsWith("ru")
+  //     ? "ru"
+  //     : "en";
+  //   const faqLang = lang === "zh" ? "zh" : "en";
+  //   const url = `https://qwenpaw.agentscope.io/docs/faq.${faqLang}.md`;
+  //   fetch(url, { cache: "no-cache" })
+  //     .then((res) => (res.ok ? res.text() : Promise.reject()))
+  //     .then((text) => {
+  //       const zhPattern = /###\s*QwenPaw如何更新[\s\S]*?(?=\n###|$)/;
+  //       const enPattern = /###\s*How to update QwenPaw[\s\S]*?(?=\n###|$)/;
+  //       const match = text.match(faqLang === "zh" ? zhPattern : enPattern);
+  //       setUpdateMarkdown(
+  //         match && lang !== "ru"
+  //           ? match[0].trim()
+  //           : UPDATE_MD[lang] ?? UPDATE_MD.en,
+  //       );
+  //     })
+  //     .catch(() => {
+  //       setUpdateMarkdown(UPDATE_MD[lang] ?? UPDATE_MD.en);
+  //     });
+  // };
 
   const handleNavClick = (url: string) => {
     if (url) {
@@ -155,10 +157,10 @@ export default function Header() {
         <div className={styles.logoWrapper}>
           <img
             src={isDark ? "/logo-dark.svg" : "/logo-light.svg"}
-            alt="QwenPaw"
+            alt="aixcore"
             className={styles.logoImg}
           />
-          <div className={styles.logoDivider} />
+          {/* <div className={styles.logoDivider} />
           {version && (
             <Badge
               dot={!!hasUpdate}
@@ -176,10 +178,10 @@ export default function Header() {
                 v{version}
               </span>
             </Badge>
-          )}
+          )} */}
         </div>
         <Space size="middle">
-          <Tooltip title={t("header.changelog")}>
+          {/* <Tooltip title={t("header.changelog")}>
             <Button
               type="text"
               onClick={() => handleNavClick(getReleaseNotesUrl(i18n.language))}
@@ -207,8 +209,8 @@ export default function Header() {
             <Button type="text" onClick={() => handleNavClick(GITHUB_URL)}>
               {t("header.github")}
             </Button>
-          </Tooltip>
-          <div className={styles.headerDivider} />
+          </Tooltip> */}
+          {/* <div className={styles.headerDivider} /> */}
           <LanguageSwitcher />
           <ThemeToggleButton />
         </Space>

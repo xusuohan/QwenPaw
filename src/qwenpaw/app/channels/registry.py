@@ -18,22 +18,22 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _BUILTIN_SPECS: dict[str, tuple[str, str]] = {
-    "imessage": (".imessage", "IMessageChannel"),
-    "discord": (".discord_", "DiscordChannel"),
+    #"imessage": (".imessage", "IMessageChannel"),
+    #"discord": (".discord_", "DiscordChannel"),
     "dingtalk": (".dingtalk", "DingTalkChannel"),
     "feishu": (".feishu", "FeishuChannel"),
     "qq": (".qq", "QQChannel"),
-    "telegram": (".telegram", "TelegramChannel"),
-    "mattermost": (".mattermost", "MattermostChannel"),
-    "mqtt": (".mqtt", "MQTTChannel"),
+    #"telegram": (".telegram", "TelegramChannel"),
+    #"mattermost": (".mattermost", "MattermostChannel"),
+    #"mqtt": (".mqtt", "MQTTChannel"),
     "console": (".console", "ConsoleChannel"),
-    "matrix": (".matrix", "MatrixChannel"),
-    "voice": (".voice", "VoiceChannel"),
-    "sip": (".sip", "SIPChannel"),
+    #"matrix": (".matrix", "MatrixChannel"),
+    #"voice": (".voice", "VoiceChannel"),
+    #"sip": (".sip", "SIPChannel"),
     "wecom": (".wecom", "WecomChannel"),
     "xiaoyi": (".xiaoyi", "XiaoYiChannel"),
     "wechat": (".wechat", "WeChatChannel"),
-    "onebot": (".onebot", "OneBotChannel"),
+    #"onebot": (".onebot", "OneBotChannel"),
 }
 
 # Required channels must load; failures are raised, not skipped.

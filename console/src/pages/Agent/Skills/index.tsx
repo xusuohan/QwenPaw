@@ -5,7 +5,7 @@ import {
   SkillCard,
   SkillDrawer,
   PoolTransferModal,
-  ImportHubModal,
+  RemoteSkillLibraryModal,
   HeaderActions,
   SkillsToolbar,
   SkillListItem,
@@ -13,9 +13,11 @@ import {
 import { PageHeader } from "@/components/PageHeader";
 import { useSkillsPage } from "./useSkillsPage";
 import styles from "./index.module.less";
+import { useState } from "react";
 
 function SkillsPage() {
   const { t } = useTranslation();
+  const [remoteLibraryOpen, setRemoteLibraryOpen] = useState(false);
   const {
     skills,
     visibleSkills,
@@ -27,10 +29,7 @@ function SkillsPage() {
     conflictRenameModal,
     loading,
     uploading,
-    importing,
     drawerOpen,
-    importModalOpen,
-    setImportModalOpen,
     editingSkill,
     form,
     fileInputRef,
@@ -59,8 +58,6 @@ function SkillsPage() {
     handleBatchDelete,
     handleUploadClick,
     handleFileChange,
-    handleConfirmImport,
-    closeImportModal,
     closePoolModal,
     toggleSelect,
     selectAll,
@@ -69,7 +66,6 @@ function SkillsPage() {
     toggleEnabled,
     refreshSkills,
     hardRefresh,
-    cancelImport,
   } = useSkillsPage();
 
   return (
@@ -94,20 +90,17 @@ function SkillsPage() {
             onOpenDownloadPool={() => setPoolModal("download")}
             onOpenUploadPool={() => setPoolModal("upload")}
             onUploadClick={handleUploadClick}
-            onImportHub={() => setImportModalOpen(true)}
+            onImportHub={() => setRemoteLibraryOpen(true)}
             onCreate={handleCreate}
             onFileChange={handleFileChange}
           />
         }
       />
 
-      <ImportHubModal
-        open={importModalOpen}
-        importing={importing}
-        onCancel={closeImportModal}
-        onConfirm={handleConfirmImport}
-        cancelImport={cancelImport}
-        hint={t("skillPool.externalHubHint")}
+      <RemoteSkillLibraryModal
+        open={remoteLibraryOpen}
+        onCancel={() => setRemoteLibraryOpen(false)}
+        onDownloadSuccess={refreshSkills}
       />
 
       {!loading && skills.length > 0 && (
