@@ -48,7 +48,7 @@ Specify the Agent to interact with via the `X-Agent-Id` header:
 
 ⚠️ **Important Notice**:
 
-- **Requests from `localhost` (127.0.0.1 or ::1) automatically bypass Web authentication**
+- **Requests from** **`localhost`** **(127.0.0.1 or ::1) automatically bypass Web authentication**
 - This is designed for local development and CLI tools (`qwenpaw`) convenience
 - Even if Web authentication is enabled, local requests do **NOT** require an `Authorization` token
 - If accessing from a **remote machine**, you must provide a valid authentication token
@@ -102,8 +102,8 @@ The API uses a specific message format, similar to OpenAI's message format:
   - `content`: Content array
     - `type`: Content type, typically "text"
     - `text`: Actual text content
-- **session_id** (optional): Session ID for maintaining context continuity
-- **user_id** (optional): User ID to identify different users
+- **session\_id** (optional): Session ID for maintaining context continuity
+- **user\_id** (optional): User ID to identify different users
 - **channel** (recommended): Channel name, recommend setting to "console"
 
 ## Making API Calls with cURL
@@ -182,7 +182,7 @@ data: {"sequence_number":3,"object":"response","status":"completed",...}
 
 ### Response Field Explanation
 
-- **sequence_number**: Event sequence number
+- **sequence\_number**: Event sequence number
 - **object**: Object type, typically "response"
 - **status**: Status
   - `created`: Created
@@ -195,7 +195,7 @@ data: {"sequence_number":3,"object":"response","status":"completed",...}
     - `type`: Content type
     - `text`: Text content
 - **error**: Error information (included on failure)
-- **session_id**: Session ID
+- **session\_id**: Session ID
 - **usage**: Token usage statistics (included on completion)
 
 ## Multi-turn Conversation
@@ -940,3 +940,4 @@ If you encounter issues using the API:
 1. Check the [FAQ](./faq) for common questions
 2. Join the [Community](./community) for assistance
 3. Submit an [Issue](https://github.com/agentscope-ai/QwenPaw/issues) on GitHub
+
