@@ -97,6 +97,7 @@ export function useSkillPool() {
   const [configText, setConfigText] = useState("{}");
   const zipInputRef = useRef<HTMLInputElement>(null);
   const [importBuiltinModalOpen, setImportBuiltinModalOpen] = useState(false);
+  const [remoteLibraryOpen, setRemoteLibraryOpen] = useState(false);
   const [builtinSources, setBuiltinSources] = useState<BuiltinImportSpec[]>([]);
   const [importBuiltinLoading, setImportBuiltinLoading] = useState(false);
   const [importModalOpen, setImportModalOpen] = useState(false);
@@ -301,6 +302,14 @@ export function useSkillPool() {
     if (importBuiltinLoading) return;
     setImportBuiltinModalOpen(false);
   };
+
+  const openRemoteLibrary = useCallback(() => {
+    setRemoteLibraryOpen(true);
+  }, []);
+
+  const closeRemoteLibrary = useCallback(() => {
+    setRemoteLibraryOpen(false);
+  }, []);
 
   const closeImportModal = () => {
     if (importing) return;
@@ -985,6 +994,7 @@ export function useSkillPool() {
     builtinSources,
     builtinLanguage,
     builtinNotice,
+    remoteLibraryOpen,
     builtinNoticeTotal,
     hasUnseenBuiltinNotice,
     importBuiltinLoading,
@@ -1016,6 +1026,8 @@ export function useSkillPool() {
     closeImportBuiltin,
     closeImportModal,
     openEdit,
+    openRemoteLibrary,
+    closeRemoteLibrary,
     closeDrawer,
     handleDrawerContentChange,
     validateFrontmatter,
