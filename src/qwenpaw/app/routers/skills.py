@@ -11,6 +11,7 @@ import shutil
 import tempfile
 import threading
 import time
+import httpx
 import uuid
 from enum import Enum
 from pathlib import Path
@@ -200,6 +201,12 @@ class CreateSkillRequest(BaseModel):
     scripts: dict[str, Any] | None = None
     config: dict[str, Any] | None = None
     enable: bool = True
+
+class DownloadSkillRequest(BaseModel):
+    """从 URL 下载并安装 skill 的请求体"""
+    zip_url: str = Field(..., description="Skill ZIP 文件的下载 URL")
+    enable: bool = Field(default=True, description="安装后是否立即启用")
+    target_name: str = Field(default="", description="可选的重命名目标名称")
 
 
 class UploadToPoolRequest(BaseModel):
@@ -788,6 +795,121 @@ async def create_skill(
         schedule_agent_reload(request, workspace.agent_id)
     return {"created": True, "name": created}
 
+@router.post("/download")
+async def download_and_install_skill(
+    request: Request,
+    body: DownloadSkillRequest,
+)-> dict[str, Any]:
+    from ..agent_context import get_agent_for_request
+
+    # 1. 获取当前 workspace
+    workspace = await get_agent_for_request(request)
+    workspace_dir = Path(workspace.workspace_dir)
+
+    # 2. 从 URL 下载 ZIP 文件
+    try:
+        zip_data = await _download_zip_from_url(body.zip_url)
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Failed to download ZIP from URL: {exc}",
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Unexpected error downloading ZIP: {exc}",
+        ) from exc
+
+    # 3. 解析重命名映射（如果有 target_name）
+    parsed_rename: dict[str, str] | None = None
+    if body.target_name.strip():
+        # 这里假设 ZIP 中只有一个 skill，直接重命名
+        # 如果需要复杂的重命名逻辑，可以扩展为 rename_map 参数
+        parsed_rename = {}  # 实际重命名在 import_from_zip 中通过 target_name 处理
+
+    # 4. 导入 skill（复用现有的 import_from_zip 逻辑）
+    try:
+        result = await asyncio.to_thread(
+            SkillService(workspace_dir).import_from_zip,
+            data=zip_data,
+            enable=body.enable,
+            target_name=body.target_name,
+            rename_map=parsed_rename,
+        )
+    except SkillScanError as exc:
+        return _scan_error_response(exc)
+    except (ValueError, AppBaseException) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    # 5. 检查冲突
+    if result.get("conflicts"):
+        raise HTTPException(status_code=409, detail=result)
+
+    # 6. 如果启用且有导入，触发 agent 重载
+    if body.enable and result.get("count", 0) > 0:
+        schedule_agent_reload(request, workspace.agent_id)
+
+    # 7. 返回结果
+    return {
+        "success": True,
+        "imported": result.get("imported", []),
+        "count": result.get("count", 0),
+        "source_url": body.zip_url,
+    }
+
+
+async def _download_zip_from_url(url: str, timeout: int = 30) -> bytes:
+    """从 URL 下载 ZIP 文件并进行基本验证。
+    """
+    # 1. 验证 URL 格式
+    if not url.startswith(("http://", "https://")):
+        raise HTTPException(
+            status_code=400,
+            detail="URL must start with http:// or https://",
+        )
+
+    # 2. 下载文件
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        try:
+            response = await client.get(url)
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail=f"HTTP error {exc.response.status_code}: {exc.response.text}",
+            ) from exc
+        except httpx.TimeoutException:
+            raise HTTPException(
+                status_code=408,
+                detail=f"Download timed out after {timeout} seconds",
+            ) from exc
+
+    # 3. 检查文件大小（限制 100MB）
+    zip_data = response.content
+    max_size = 100 * 1024 * 1024  # 100 MB
+    if len(zip_data) > max_size:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"File too large ({len(zip_data) // (1024 * 1024)} MB). "
+                f"Maximum is {max_size // (1024 * 1024)} MB."
+            ),
+        )
+
+    # 4. 验证是否为有效的 ZIP 文件
+    import zipfile
+    import io
+    try:
+        with zipfile.ZipFile(io.BytesIO(zip_data)) as zf:
+            # 尝试读取 ZIP 信息以验证有效性
+            zf.testzip()
+    except zipfile.BadZipFile:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid ZIP file format",
+        )
+
+    return zip_data
 
 @router.post("/upload")
 async def upload_skill_zip(
