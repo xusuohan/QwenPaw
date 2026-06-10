@@ -795,6 +795,26 @@ async def create_skill(
         schedule_agent_reload(request, workspace.agent_id)
     return {"created": True, "name": created}
 
+
+@router.post("/check")
+async def check_skill_exists(
+        request: Request,
+        skill_name: str = Body(..., embed=True),
+) -> dict[str, bool]:
+    """检查指定名称的技能是否存在于当前工作区。
+
+    Args:
+        request: HTTP请求对象，用于获取当前工作区
+        skill_name: 要检查的技能名称
+
+    Returns:
+        包含exists字段的字典，如果技能存在则返回True，否则返回False
+    """
+    workspace_dir = await _request_workspace_dir(request)
+    skill_dir = get_workspace_skills_dir(workspace_dir) / skill_name
+    return {"exists": skill_dir.exists()}
+
+
 @router.post("/download")
 async def download_and_install_skill(
     request: Request,
