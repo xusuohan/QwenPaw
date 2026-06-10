@@ -28,7 +28,7 @@ case "$(uname -s)" in
     ;;
   *)
     echo "Unsupported platform: $(uname -s)"
-    echo "Please run this script on macOS or Linux"
+    echo "For Windows, run: powershell -ExecutionPolicy Bypass -File scripts/pack/build_win_portable.ps1"
     exit 1
     ;;
 esac
@@ -54,6 +54,7 @@ QwenPaw Portable
 2. 运行对应程序：
    - macOS: 运行 macOS/QwenPaw.app
    - Linux: 运行 linux/start.sh
+   - Windows: 运行 windows/start.vbs（或 start.bat）
 
 所有数据存储在 data/ 目录，可在不同电脑间携带。
 

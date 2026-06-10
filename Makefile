@@ -1,7 +1,7 @@
 # CoPaw Test & Coverage Makefile
 
 .PHONY: test test-unit test-contract test-integration test-channel test-channel-contract coverage-full clean \
-       portable desktop-macos desktop-linux desktop-windows build-all dist-clean
+       portable portable-windows desktop-macos desktop-linux desktop-windows build-all dist-clean
 
 # Python path
 PYTHON := python
@@ -59,6 +59,10 @@ test-base-core:
 # Build portable version for current platform (USB plug-and-play)
 portable:
 	bash scripts/pack/build_portable.sh
+
+# Build Windows portable version (PowerShell, run on Windows)
+portable-windows:
+	powershell -ExecutionPolicy Bypass -File scripts/pack/build_win_portable.ps1
 
 # Build macOS desktop app (.app bundle)
 desktop-macos:
