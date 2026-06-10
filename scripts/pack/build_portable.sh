@@ -26,9 +26,14 @@ case "$(uname -s)" in
     mkdir -p "${PORTABLE_DIR}/linux"
     mv "${DIST}/linux/"* "${PORTABLE_DIR}/linux/"
     ;;
+  MINGW*|MSYS*|CYGWIN*)
+    echo "Building Windows version..."
+    powershell -ExecutionPolicy Bypass -File scripts/pack/build_win_portable.ps1
+    # build_win_portable.ps1 creates the full portable structure, nothing else to do
+    exit 0
+    ;;
   *)
     echo "Unsupported platform: $(uname -s)"
-    echo "For Windows, run: powershell -ExecutionPolicy Bypass -File scripts/pack/build_win_portable.ps1"
     exit 1
     ;;
 esac
