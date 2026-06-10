@@ -124,9 +124,16 @@ if [ ! -t 2 ]; then
   else
     echo "Exit code: $EXIT"
   fi
+  # Safety net: kill orphaned backend processes.
+  if pgrep -f "qwenpaw app" >/dev/null 2>&1; then
+    "$ENV_DIR/bin/python" -u -m qwenpaw shutdown 2>/dev/null || true
+  fi
   echo "--- Full log: $LOG ---"
   exit $EXIT
 fi
+# TTY mode — also add a safety net via trap
+_cleanup_orphans() { "$ENV_DIR/bin/python" -u -m qwenpaw shutdown 2>/dev/null || true; }
+trap _cleanup_orphans EXIT
 exec "$ENV_DIR/bin/python" -u -m qwenpaw desktop --log-level "$LOG_LEVEL"
 LAUNCHER
 chmod +x "${DIST}/linux/start.sh"

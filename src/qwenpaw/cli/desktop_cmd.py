@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import logging
 import os
+import signal
 import socket
 import subprocess
 import sys
@@ -128,6 +129,111 @@ def _stream_reader(in_stream, out_stream) -> None:
             pass
 
 
+# Module-level reference so the SIGTERM handler can reach the backend proc.
+_backend_proc: subprocess.Popen | None = None
+
+
+def _kill_process_tree(proc, log) -> None:
+    """Kill the backend process and its entire descendant tree.
+
+    On Unix the child is started with ``start_new_session=True`` so that it
+    and every descendant share a dedicated process group (PGID == child PID).
+    ``os.killpg`` signals the whole group at once.
+
+    Graceful shutdown (SIGTERM / taskkill) is tried first; if the process
+    does not exit within 5 seconds the whole tree is force-killed (SIGKILL /
+    taskkill /F).
+    """
+    if not proc or proc.poll() is not None:
+        if proc:
+            log.info("Backend already exited with code %s", proc.returncode)
+        return
+
+    is_win = sys.platform == "win32"
+    log.info("Terminating backend server process tree...")
+
+    # --- Step 1: graceful termination (SIGTERM / taskkill) ---
+    if is_win:
+        try:
+            subprocess.run(
+                ["taskkill", "/T", "/PID", str(proc.pid)],
+                capture_output=True,
+                timeout=10,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+        try:
+            proc.terminate()
+        except (ProcessLookupError, OSError):
+            pass
+    else:
+        try:
+            os.killpg(proc.pid, signal.SIGTERM)
+        except (ProcessLookupError, OSError) as exc:
+            log.debug("killpg(SIGTERM): %s", exc)
+
+    # --- Step 2: wait for graceful exit ---
+    try:
+        proc.wait(timeout=5.0)
+        log.info("Backend server terminated cleanly.")
+        return
+    except subprocess.TimeoutExpired:
+        log.warning(
+            "Backend did not exit in 5 s, force killing process tree...",
+        )
+
+    # --- Step 3: force kill (SIGKILL / taskkill /F) ---
+    if is_win:
+        try:
+            subprocess.run(
+                ["taskkill", "/T", "/F", "/PID", str(proc.pid)],
+                capture_output=True,
+                timeout=10,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+        try:
+            proc.kill()
+        except (ProcessLookupError, OSError):
+            pass
+    else:
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except (ProcessLookupError, OSError) as exc:
+            log.debug("killpg(SIGKILL): %s", exc)
+
+    # --- Step 4: final reap ---
+    try:
+        proc.wait(timeout=2.0)
+        log.info("Backend server force killed.")
+    except subprocess.TimeoutExpired:
+        log.error("Backend process did not exit after SIGKILL!")
+    except (ProcessLookupError, OSError):
+        pass
+
+
+def _sigterm_handler(signum, _frame):
+    """On SIGTERM force-kill the backend tree immediately, then exit."""
+    global _backend_proc  # noqa: PLW0603
+    proc = _backend_proc
+    if proc and proc.poll() is None:
+        logger.warning("SIGTERM received — force killing backend tree...")
+        if sys.platform == "win32":
+            try:
+                proc.kill()
+            except (ProcessLookupError, OSError):
+                pass
+        else:
+            try:
+                os.killpg(proc.pid, signal.SIGKILL)
+            except (ProcessLookupError, OSError):
+                pass
+    # Re-raise so `finally` blocks and `atexit` handlers still run.
+    raise SystemExit(128 + signum)
+
+
 @click.command("desktop")
 @click.option(
     "--host",
@@ -155,6 +261,7 @@ def desktop_cmd(
     native webview window loading that URL. Use for a dedicated desktop
     window without conflicting with an existing QwenPaw app instance.
     """
+    global _backend_proc  # noqa: PLW0603
     # Setup logger for desktop command (separate from backend subprocess)
     setup_logger(log_level)
 
@@ -202,7 +309,14 @@ def desktop_cmd(
             env=env,
             bufsize=1,
             universal_newlines=True,
+            # Create a dedicated process group on Unix so that os.killpg
+            # can terminate the *entire* descendant tree (backend + MCP
+            # servers, llama.cpp, browser, etc.) in one call.
+            start_new_session=not is_windows,
         )
+        # Expose to SIGTERM handler
+        _backend_proc = proc
+        signal.signal(signal.SIGTERM, _sigterm_handler)
         try:
             if is_windows:
                 stdout_thread = threading.Thread(
@@ -248,45 +362,14 @@ def desktop_cmd(
                 except KeyboardInterrupt:
                     pass  # will be handled in finally
         finally:
-            # Ensure backend process is always cleaned up
-            # Wrap all cleanup operations to handle race conditions:
-            # - Process may exit between poll() and terminate()
-            # - terminate()/kill() may raise ProcessLookupError/OSError
-            # - We must not let cleanup exceptions mask the original error
-            if proc and proc.poll() is None:  # process still running
-                logger.info("Terminating backend server...")
-                manually_terminated = (
-                    True  # Mark that we're intentionally terminating
-                )
-                try:
-                    proc.terminate()
-                    try:
-                        proc.wait(timeout=5.0)
-                        logger.info("Backend server terminated cleanly.")
-                    except subprocess.TimeoutExpired:
-                        logger.warning(
-                            "Backend did not exit in 5s, force killing...",
-                        )
-                        try:
-                            proc.kill()
-                            proc.wait()
-                            logger.info("Backend server force killed.")
-                        except (ProcessLookupError, OSError) as e:
-                            # Process already exited, which is fine
-                            logger.debug(
-                                f"kill() raised {e.__class__.__name__} "
-                                f"(process already exited)",
-                            )
-                except (ProcessLookupError, OSError) as e:
-                    # Process already exited between poll() and terminate()
-                    logger.debug(
-                        f"terminate() raised {e.__class__.__name__} "
-                        f"(process already exited)",
-                    )
-            elif proc:
-                logger.info(
-                    f"Backend already exited with code {proc.returncode}",
-                )
+            # Ensure backend process tree is always cleaned up.
+            # Restore default signal handler first to avoid re-entrancy.
+            _backend_proc = None
+            signal.signal(signal.SIGTERM, signal.SIG_DFL)
+
+            if proc and proc.poll() is None:
+                manually_terminated = True
+            _kill_process_tree(proc, logger)
 
         # Only report errors if process exited unexpectedly
         # (not manually terminated)

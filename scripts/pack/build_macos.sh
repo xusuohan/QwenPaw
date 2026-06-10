@@ -139,6 +139,15 @@ fi
 
 echo "Launching python with log-level=$LOG_LEVEL..."
 "$ENV_DIR/bin/python" -u -m qwenpaw desktop --log-level "$LOG_LEVEL"
+EXIT=$?
+
+# Safety net: ensure no orphaned backend processes survive after exit.
+# This handles edge cases where the desktop process was force-killed
+# (SIGKILL) before its own cleanup could run.
+if [ $EXIT -ne 0 ] || pgrep -f "qwenpaw app" >/dev/null 2>&1; then
+  "$ENV_DIR/bin/python" -u -m qwenpaw shutdown 2>/dev/null || true
+fi
+exit $EXIT
 LAUNCHER
 chmod +x "${APP_DIR}/Contents/MacOS/${APP_NAME}"
 
