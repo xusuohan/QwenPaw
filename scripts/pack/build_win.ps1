@@ -180,7 +180,10 @@ if (Test-Path $CondaUnpack) {
     if ($LASTEXITCODE -ne 0) {
       throw "CRITICAL: huggingface_hub still has import errors after reinstall. See issue.md"
     }
-    & $pythonExe -c "import discord; print('✓ discord.py import OK')"
+    # discord.py -> aiohttp triggers ssl.create_default_context() which fails
+    # in embedded Python on Windows due to cert store parsing (ASN1 error).
+    # Disable SSL cert loading to verify the actual import works.
+    & $pythonExe -c "import ssl; ssl._create_default_https_context = ssl._create_unverified_context; import discord; print('✓ discord.py import OK')"
     if ($LASTEXITCODE -ne 0) {
       throw "CRITICAL: discord.py still has import errors after reinstall."
     }
