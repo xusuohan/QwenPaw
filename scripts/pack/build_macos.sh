@@ -54,6 +54,9 @@ mkdir -p "${APP_DIR}/Contents/Resources"
 mkdir -p "${APP_DIR}/Contents/Resources/env"
 tar -xzf "$ARCHIVE" -C "${APP_DIR}/Contents/Resources/env" --strip-components=0
 
+echo "== Pre-compiling Python bytecode =="
+"${APP_DIR}/Contents/Resources/env/bin/python" -m compileall -q -j 0 "${APP_DIR}/Contents/Resources/env" 2>/dev/null || true
+
 # Launcher: force packed env; when no TTY log to ~/.qwenpaw/desktop.log (no exec so we see errors)
 cat > "${APP_DIR}/Contents/MacOS/${APP_NAME}" << 'LAUNCHER'
 #!/usr/bin/env bash

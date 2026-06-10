@@ -101,6 +101,7 @@ def _find_cached_env(env_hash: str) -> str | None:
         result = subprocess.run(
             [_conda_exe(), "env", "list", "--json"],
             capture_output=True, text=True,
+            check=False,
         )
         if result.returncode == 0:
             import json
@@ -170,6 +171,7 @@ def main() -> int:
     use_cache = cached_env is not None and out_path.exists()
 
     if use_cache:
+        assert cached_env is not None
         print(f"Using cached conda env: {cached_env}")
         env_name = cached_env
     else:
@@ -179,6 +181,7 @@ def main() -> int:
 
     try:
         if not use_cache:
+            create_env = {**os.environ, "CONDA_SOLVER": "libmamba"}
             _run(
                 [
                     conda,
@@ -188,7 +191,9 @@ def main() -> int:
                     f"python={args.python}",
                     "pip",
                     "-y",
+                    "--no-default-packages",
                 ],
+                env=create_env,
             )
             # Install qwenpaw with all dependencies
             # Scope CMAKE_ARGS to this specific command to avoid affecting other
@@ -261,17 +266,6 @@ def main() -> int:
                     "pip",
                     "setuptools",
                     "wheel",
-                ],
-            )
-            _run(
-                [
-                    conda,
-                    "run",
-                    "-n",
-                    env_name,
-                    conda,
-                    "install",
-                    "-y",
                     "conda-pack",
                 ],
             )
@@ -293,6 +287,7 @@ def main() -> int:
         ]
         if args.format != "infer":
             pack_cmd.extend(["--format", args.format])
+        pack_cmd.extend(["--compress-level", "1"])
         _run(pack_cmd)
         print(f"Packed to {out_path}")
     finally:

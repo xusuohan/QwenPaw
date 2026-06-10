@@ -116,10 +116,16 @@ if (Test-Path $WinDir) { Remove-Item -Recurse -Force $WinDir }
 New-Item -ItemType Directory -Force -Path $WinDir | Out-Null
 
 Write-Host "[build_win_portable] Extracting $Archive -> $WinDir"
-Expand-Archive -Path $Archive -DestinationPath $WinDir -Force
+$_7z = Get-Command 7z -ErrorAction SilentlyContinue
+if ($_7z) {
+  Write-Host "[build_win_portable] Using 7-Zip for fast extraction..."
+  & 7z x $Archive -o"$WinDir" -y -aoa | Select-Object -Last 3
+} else {
+  Expand-Archive -Path $Archive -DestinationPath $WinDir -Force
+}
 
 # Find actual env root (archive may have a top-level directory)
-$PythonExe = Get-ChildItem -Path $WinDir -Recurse -Filter "python.exe" |
+$PythonExe = Get-ChildItem -Path $WinDir -Depth 2 -Filter "python.exe" |
   Where-Object { $_.DirectoryName -match "\\Scripts$" -or $_.DirectoryName -match "/Scripts$" } |
   Select-Object -First 1
 if ($PythonExe) {

@@ -130,7 +130,14 @@ if (-not (Test-Path $Archive)) {
 
 Write-Host "== Unpacking env =="
 if (Test-Path $Unpacked) { Remove-Item -Recurse -Force $Unpacked }
-Expand-Archive -Path $Archive -DestinationPath $Unpacked -Force
+# Use 7-Zip if available (2-3x faster than Expand-Archive), otherwise fallback
+$_7z = Get-Command 7z -ErrorAction SilentlyContinue
+if ($_7z) {
+  Write-Host "[build_win] Using 7-Zip for fast extraction..."
+  & 7z x $Archive -o"$Unpacked" -y -aoa | Select-Object -Last 3
+} else {
+  Expand-Archive -Path $Archive -DestinationPath $Unpacked -Force
+}
 $unpackedRoot = Get-ChildItem -Path $Unpacked -ErrorAction SilentlyContinue | Measure-Object
 Write-Host "[build_win] Unpacked entries in $Unpacked : $($unpackedRoot.Count)"
 
@@ -164,14 +171,12 @@ if (Test-Path $CondaUnpack) {
   $WheelsCache = Join-Path $RepoRoot ".cache\conda_unpack_wheels"
   if (Test-Path $WheelsCache) {
     $pythonExe = Join-Path $EnvRoot "python.exe"
-    
-    foreach ($pkg in $CondaUnpackAffectedPackages) {
-      Write-Host "  Reinstalling $pkg..."
-      & $pythonExe -m pip install --force-reinstall --no-deps `
-        --find-links $WheelsCache --no-index $pkg
-      if ($LASTEXITCODE -ne 0) {
-        Write-Host "  WARN: Failed to reinstall $pkg (exit code: $LASTEXITCODE)" -ForegroundColor Yellow
-      }
+
+    Write-Host "  Reinstalling $($CondaUnpackAffectedPackages -join ', ')..."
+    & $pythonExe -m pip install --force-reinstall --no-deps `
+      --find-links $WheelsCache --no-index @CondaUnpackAffectedPackages
+    if ($LASTEXITCODE -ne 0) {
+      Write-Host "  WARN: pip reinstall failed (exit code: $LASTEXITCODE)" -ForegroundColor Yellow
     }
     
     # Verify the fix worked
