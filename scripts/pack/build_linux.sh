@@ -48,7 +48,7 @@ mkdir -p "${DIST}/linux/env"
 tar -xzf "$ARCHIVE" -C "${DIST}/linux/env" --strip-components=0
 
 echo "== Pre-compiling Python bytecode =="
-"${DIST}/linux/env/bin/python" -m compileall -q -j 0 "${DIST}/linux/env" 2>/dev/null || true
+"${DIST}/linux/env/bin/python" -m compileall -q -j 0 "${DIST}/linux/env" >/dev/null 2>&1 || true
 
 # Create launcher script
 cat > "${DIST}/linux/start.sh" << 'LAUNCHER'
