@@ -11,6 +11,7 @@ interface RemoteSkillLibraryModalProps {
   open: boolean;
   onCancel: () => void;
   onDownloadSuccess?: () => void | Promise<void>;
+  poolMode?: boolean;
 }
 
 const SKILLHUB_ORIGIN = "https://skillhub.goldlokai.com";
