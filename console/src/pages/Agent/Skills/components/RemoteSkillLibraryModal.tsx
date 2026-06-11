@@ -94,8 +94,8 @@ export function RemoteSkillLibraryModal({
   const [skillExists, setSkillExists] = useState<boolean | null>(null);
   const [checking, setChecking] = useState(false);
 
-  const downloadEndpoint = poolMode ? "/pool/skills/download" : "/skills/download";
-  const checkEndpoint = poolMode ? "/pool/skills/check" : "/skills/check";
+  const downloadEndpoint = poolMode ? "/skills/pool/download" : "/skills/download";
+  const checkEndpoint = poolMode ? "/skills/pool/check" : "/skills/check";
 
   const displayUrl = useMemo(() => {
     try {
