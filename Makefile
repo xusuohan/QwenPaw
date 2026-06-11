@@ -57,8 +57,13 @@ test-base-core:
 	$(PYTEST) tests/unit/channels/test_base_core.py -v
 
 # Build portable version for current platform (USB plug-and-play)
+ifeq ($(OS),Windows_NT)
+portable:
+	powershell -ExecutionPolicy Bypass -File scripts/pack/build_win_portable.ps1
+else
 portable:
 	bash scripts/pack/build_portable.sh
+endif
 
 # Build Windows portable version (PowerShell, run on Windows)
 portable-windows:

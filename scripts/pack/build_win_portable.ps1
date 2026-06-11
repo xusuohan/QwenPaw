@@ -51,7 +51,8 @@ Write-Host "== All build dependencies found =="
 # --- Paths ---
 $Dist = if ($env:DIST) { $env:DIST } else { "dist" }
 $Archive = Join-Path $Dist "qwenpaw-env.zip"
-$PortableRoot = Join-Path $Dist "QwenPaw-Portable"
+$_Timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
+$PortableRoot = Join-Path $Dist "QwenPaw-Portable_$_Timestamp"
 $WinDir = Join-Path $PortableRoot "windows"
 $EnvDir = Join-Path $WinDir "env"
 $DataDir = Join-Path $PortableRoot "data"
@@ -453,18 +454,16 @@ Write-Host "[build_win_portable] README.txt created"
 # --- Optional: Create ZIP ---
 if ($env:CREATE_ZIP -eq "1") {
   Write-Host "== Creating ZIP archive =="
-  $ZipName = "QwenPaw-Portable-Windows-$Version.zip"
+  $ZipName = "QwenPaw-Portable-Windows-${Version}-${_Timestamp}.zip"
   $ZipPath = Join-Path $Dist $ZipName
   if (Test-Path $ZipPath) { Remove-Item $ZipPath -Force }
   Compress-Archive -Path $PortableRoot -DestinationPath $ZipPath -Force
   Write-Host "[build_win_portable] ZIP created: $ZipPath"
 }
 
-# --- Clean intermediate artifacts ---
+# --- Clean intermediate artifacts (keep existing portable directories) ---
 Write-Host "== Cleaning build artifacts =="
 if (Test-Path $Archive) { Remove-Item $Archive -Force }
-Get-ChildItem -Path $Dist -Filter "qwenpaw-*.whl" -ErrorAction SilentlyContinue | Remove-Item -Force
-Get-ChildItem -Path $Dist -Filter "qwenpaw-*.tar.gz" -ErrorAction SilentlyContinue | Remove-Item -Force
 Write-Host "[build_win_portable] Cleaned up intermediate files"
 
 # --- Summary ---
