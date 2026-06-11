@@ -124,6 +124,22 @@ class ThreadedProcess:
         return None
 
 
+def _terminate_win_tree(pid: int, *, force: bool = False) -> None:
+    """Terminate a process tree on Windows using taskkill /T."""
+    cmd = ["taskkill", "/T", "/PID", str(pid)]
+    if force:
+        cmd.insert(1, "/F")
+    try:
+        subprocess.run(
+            cmd,
+            capture_output=True,
+            timeout=10,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+
+
 class ManagedProcess:
     """Unified wrapper for long-lived processes across launch modes."""
 
@@ -177,6 +193,10 @@ class ManagedProcess:
                 os.killpg(os.getpgid(self.pid), signal.SIGTERM)
             return
 
+        if self.platform_name == "nt":
+            _terminate_win_tree(self.pid, force=False)
+            return
+
         with suppress(ProcessLookupError):
             self._process.terminate()
 
@@ -184,6 +204,10 @@ class ManagedProcess:
         if _supports_process_groups(self):
             with suppress(ProcessLookupError):
                 os.killpg(os.getpgid(self.pid), signal.SIGKILL)
+            return
+
+        if self.platform_name == "nt":
+            _terminate_win_tree(self.pid, force=True)
             return
 
         with suppress(ProcessLookupError):

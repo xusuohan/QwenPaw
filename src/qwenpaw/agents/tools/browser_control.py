@@ -251,25 +251,36 @@ async def _idle_watchdog(
 def _atexit_cleanup() -> None:
     """Best-effort browser cleanup registered with :func:`atexit`.
 
-    Playwright child processes are cleaned up by the OS when the parent
-    exits, but this gives Playwright a chance to flush any pending I/O and
-    close Chrome gracefully before the process disappears.
+    On Windows, directly calls taskkill to kill the browser tree without
+    needing an event loop.  On other platforms, tries the async path first
+    and falls back to process-level termination.
     """
     if not _workspace_states:
         return
 
-    try:
-        loop = asyncio.get_event_loop()
-        if loop.is_running() or loop.is_closed():
-            return
-        for ws_state in list(_workspace_states.values()):
-            if _is_browser_running(ws_state):
+    for ws_state in list(_workspace_states.values()):
+        proc = ws_state.get("browser_process")
+        if proc is None or proc.poll() is not None:
+            continue
+
+        if sys.platform == "win32":
+            _kill_process_tree_win32_browser(proc.pid, force=True)
+            continue
+
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running() or loop.is_closed():
                 try:
-                    loop.run_until_complete(_action_stop(ws_state))
-                except Exception:
+                    proc.terminate()
+                except OSError:
                     pass
-    except Exception:
-        pass
+                continue
+            try:
+                loop.run_until_complete(_action_stop(ws_state))
+            except Exception:
+                pass
+        except Exception:
+            pass
 
 
 atexit.register(_atexit_cleanup)
@@ -585,20 +596,45 @@ async def _stop_owned_browser_process(state: dict) -> bool:
 
     try:
         if sys.platform == "win32":
-            proc.terminate()
+            await asyncio.to_thread(
+                _kill_process_tree_win32_browser,
+                proc.pid,
+            )
         else:
             proc.send_signal(signal.SIGTERM)
         await asyncio.to_thread(proc.wait, 5)
-        return True
     except subprocess.TimeoutExpired:
         try:
-            proc.kill()
+            if sys.platform == "win32":
+                await asyncio.to_thread(
+                    _kill_process_tree_win32_browser,
+                    proc.pid,
+                    force=True,
+                )
+            else:
+                proc.kill()
             await asyncio.to_thread(proc.wait, 5)
-            return True
         except Exception:
             return False
     except Exception:
         return False
+    return True
+
+
+def _kill_process_tree_win32_browser(pid: int, *, force: bool = False) -> None:
+    """Kill Chromium and its children on Windows via taskkill /T."""
+    cmd = ["taskkill", "/T", "/PID", str(pid)]
+    if force:
+        cmd.insert(1, "/F")
+    try:
+        subprocess.call(
+            cmd,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=10,
+        )
+    except Exception:
+        pass
 
 
 def _parse_json_param(value: str, default: Any = None):

@@ -13,6 +13,7 @@ import threading
 import time
 import traceback
 import webbrowser
+from typing import Any
 
 import click
 
@@ -131,6 +132,156 @@ def _stream_reader(in_stream, out_stream) -> None:
 
 # Module-level reference so the SIGTERM handler can reach the backend proc.
 _backend_proc: subprocess.Popen | None = None
+# Windows Job Object handle — closing it kills all assigned processes.
+_win_job_handle: Any | None = None
+
+
+def _create_win_job_object() -> Any | None:
+    """Create a Windows Job Object with JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE.
+
+    When the handle is closed (process exit, even crash), Windows
+    automatically terminates every process assigned to the job.  Returns
+    the ctypes handle on success, or ``None`` on non-Windows / failure.
+    """
+    if sys.platform != "win32":
+        return None
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+
+        # CreateJobObjectW
+        CreateJobObjectW = kernel32.CreateJobObjectW
+        CreateJobObjectW.argtypes = [wintypes.LPVOID, wintypes.LPCWSTR]
+        CreateJobObjectW.restype = wintypes.HANDLE
+
+        # SetInformationJobObject
+        SetInformationJobObject = kernel32.SetInformationJobObject
+        SetInformationJobObject.argtypes = [
+            wintypes.HANDLE,  # hJob
+            wintypes.DWORD,  # JobObjectInfoClass
+            wintypes.LPVOID,  # lpJobObjectInfo
+            wintypes.DWORD,  # cbJobObjectInfoLength
+        ]
+        SetInformationJobObject.restype = wintypes.BOOL
+
+        # AssignProcessToJobObject
+        AssignProcessToJobObject = kernel32.AssignProcessToJobObject
+        AssignProcessToJobObject.argtypes = [
+            wintypes.HANDLE,  # hJob
+            wintypes.HANDLE,  # hProcess
+        ]
+        AssignProcessToJobObject.restype = wintypes.BOOL
+
+        JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE = 0x2000
+        JobObjectExtendedLimitInformation = 9
+
+        class JOBOBJECT_BASIC_LIMIT_INFORMATION(ctypes.Structure):
+            _fields_ = [
+                ("PerProcessUserTimeLimit", wintypes.LARGE_INTEGER),
+                ("PerJobUserTimeLimit", wintypes.LARGE_INTEGER),
+                ("LimitFlags", wintypes.DWORD),
+                ("MinimumWorkingSetSize", ctypes.c_size_t),
+                ("MaximumWorkingSetSize", ctypes.c_size_t),
+                ("ActiveProcessLimit", wintypes.DWORD),
+                ("Affinity", ctypes.c_size_t),
+                ("PriorityClass", wintypes.DWORD),
+                ("SchedulingClass", wintypes.DWORD),
+            ]
+
+        class IO_COUNTERS(ctypes.Structure):
+            _fields_ = [
+                ("ReadOperationCount", wintypes.ULONGLONG),
+                ("WriteOperationCount", wintypes.ULONGLONG),
+                ("OtherOperationCount", wintypes.ULONGLONG),
+                ("ReadTransferCount", wintypes.ULONGLONG),
+                ("WriteTransferCount", wintypes.ULONGLONG),
+                ("OtherTransferCount", wintypes.ULONGLONG),
+            ]
+
+        class JOBOBJECT_EXTENDED_LIMIT_INFORMATION(ctypes.Structure):
+            _fields_ = [
+                ("BasicLimitInformation", JOBOBJECT_BASIC_LIMIT_INFORMATION),
+                ("IoInfo", IO_COUNTERS),
+                ("ProcessMemoryLimit", ctypes.c_size_t),
+                ("JobMemoryLimit", ctypes.c_size_t),
+                ("PeakProcessMemoryUsed", ctypes.c_size_t),
+                ("PeakJobMemoryUsed", ctypes.c_size_t),
+            ]
+
+        job_handle = CreateJobObjectW(None, None)
+        if not job_handle:
+            logger.warning("CreateJobObjectW failed")
+            return None
+
+        info = JOBOBJECT_EXTENDED_LIMIT_INFORMATION()
+        info.BasicLimitInformation.LimitFlags = (
+            JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+        )
+        if not SetInformationJobObject(
+            job_handle,
+            JobObjectExtendedLimitInformation,
+            ctypes.byref(info),
+            ctypes.sizeof(info),
+        ):
+            logger.warning("SetInformationJobObject failed")
+            kernel32.CloseHandle(job_handle)
+            return None
+
+        logger.info("Windows Job Object created with KILL_ON_JOB_CLOSE")
+        return job_handle
+    except Exception:
+        logger.warning("Failed to create Windows Job Object", exc_info=True)
+        return None
+
+
+def _assign_process_to_win_job(
+    job_handle: Any,
+    proc: subprocess.Popen,
+) -> bool:
+    """Assign a subprocess to the Job Object so it is killed on close."""
+    if not job_handle or sys.platform != "win32":
+        return False
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+
+        # OpenProcess to get a handle from PID
+        PROCESS_ALL_ACCESS = 0x1F0FFF
+        proc_handle = kernel32.OpenProcess(PROCESS_ALL_ACCESS, False, proc.pid)
+        if not proc_handle:
+            logger.warning("OpenProcess failed for PID %s", proc.pid)
+            return False
+
+        AssignProcessToJobObject = kernel32.AssignProcessToJobObject
+        AssignProcessToJobObject.argtypes = [
+            wintypes.HANDLE,
+            wintypes.HANDLE,
+        ]
+        AssignProcessToJobObject.restype = wintypes.BOOL
+
+        result = AssignProcessToJobObject(job_handle, proc_handle)
+        kernel32.CloseHandle(proc_handle)
+        if result:
+            logger.info(
+                "Backend PID %s assigned to Job Object",
+                proc.pid,
+            )
+        else:
+            logger.warning(
+                "AssignProcessToJobObject failed for PID %s",
+                proc.pid,
+            )
+        return bool(result)
+    except Exception:
+        logger.warning(
+            "Failed to assign process to Job Object",
+            exc_info=True,
+        )
+        return False
 
 
 def _kill_process_tree(proc, log) -> None:
@@ -140,9 +291,16 @@ def _kill_process_tree(proc, log) -> None:
     and every descendant share a dedicated process group (PGID == child PID).
     ``os.killpg`` signals the whole group at once.
 
-    Graceful shutdown (SIGTERM / taskkill) is tried first; if the process
-    does not exit within 5 seconds the whole tree is force-killed (SIGKILL /
-    taskkill /F).
+    On Windows we rely exclusively on ``taskkill /T`` (tree kill).  Crucially
+    we must **not** call ``proc.terminate()`` or ``proc.kill()`` because those
+    only terminate the single backend process — the direct child — and leave
+    every grandchild (llama.cpp, MCP servers, browser, shell) orphaned.  Once
+    the backend PID disappears, ``taskkill /T /F`` can no longer traverse the
+    tree, so the descendants survive as zombies.
+
+    Graceful shutdown (SIGTERM / ``taskkill /T``) is tried first; if the
+    process does not exit within 5 seconds the whole tree is force-killed
+    (SIGKILL / ``taskkill /F /T``).
     """
     if not proc or proc.poll() is not None:
         if proc:
@@ -154,6 +312,9 @@ def _kill_process_tree(proc, log) -> None:
 
     # --- Step 1: graceful termination (SIGTERM / taskkill) ---
     if is_win:
+        # taskkill /T without /F sends WM_CLOSE to every process in the
+        # tree.  Console-only processes (Python, llama.cpp) ignore WM_CLOSE,
+        # but GUI sub-processes (Chromium) may honour it.
         try:
             subprocess.run(
                 ["taskkill", "/T", "/PID", str(proc.pid)],
@@ -163,10 +324,10 @@ def _kill_process_tree(proc, log) -> None:
             )
         except (OSError, subprocess.TimeoutExpired):
             pass
-        try:
-            proc.terminate()
-        except (ProcessLookupError, OSError):
-            pass
+        # NOTE: Do NOT call proc.terminate() here!  On Windows,
+        # Popen.terminate() -> TerminateProcess() kills only the target PID,
+        # not its children.  This breaks the parent-child chain so the
+        # subsequent taskkill /T /F cannot walk the tree any more.
     else:
         try:
             os.killpg(proc.pid, signal.SIGTERM)
@@ -194,10 +355,8 @@ def _kill_process_tree(proc, log) -> None:
             )
         except (OSError, subprocess.TimeoutExpired):
             pass
-        try:
-            proc.kill()
-        except (ProcessLookupError, OSError):
-            pass
+        # Same as above: no proc.kill() — taskkill /T /F already handled
+        # the entire tree.
     else:
         try:
             os.killpg(proc.pid, signal.SIGKILL)
@@ -222,8 +381,13 @@ def _sigterm_handler(signum, _frame):
         logger.warning("SIGTERM received — force killing backend tree...")
         if sys.platform == "win32":
             try:
-                proc.kill()
-            except (ProcessLookupError, OSError):
+                subprocess.run(
+                    ["taskkill", "/T", "/F", "/PID", str(proc.pid)],
+                    capture_output=True,
+                    timeout=10,
+                    check=False,
+                )
+            except (OSError, subprocess.TimeoutExpired):
                 pass
         else:
             try:
@@ -261,7 +425,7 @@ def desktop_cmd(
     native webview window loading that URL. Use for a dedicated desktop
     window without conflicting with an existing QwenPaw app instance.
     """
-    global _backend_proc  # noqa: PLW0603
+    global _backend_proc, _win_job_handle  # noqa: PLW0603
     # Setup logger for desktop command (separate from backend subprocess)
     setup_logger(log_level)
 
@@ -289,6 +453,15 @@ def desktop_cmd(
     manually_terminated = (
         False  # Track if we intentionally terminated the process
     )
+
+    # Create a Windows Job Object so that all descendant processes are
+    # automatically killed when this (parent) process exits — even on
+    # crash or force-kill.  The KILL_ON_JOB_CLOSE flag makes Windows
+    # terminate every process in the job the moment the job handle is
+    # closed.
+    if is_windows:
+        _win_job_handle = _create_win_job_object()
+
     try:
         proc = subprocess.Popen(
             [
@@ -317,6 +490,11 @@ def desktop_cmd(
         # Expose to SIGTERM handler
         _backend_proc = proc
         signal.signal(signal.SIGTERM, _sigterm_handler)
+
+        # Assign backend to Windows Job Object (safety net: all descendants
+        # are killed when this process exits).
+        if is_windows and _win_job_handle:
+            _assign_process_to_win_job(_win_job_handle, proc)
         try:
             if is_windows:
                 stdout_thread = threading.Thread(
