@@ -9,6 +9,7 @@
     "create": "Create",
     "upload": "Upload",
     "download": "Download",
+    "overwrite": "Overwrite",
     "refresh": "Refresh",
     "enable": "Enable",
     "disable": "Disable",

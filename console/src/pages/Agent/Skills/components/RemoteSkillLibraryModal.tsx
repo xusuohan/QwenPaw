@@ -1,7 +1,7 @@
 import { Button, Modal, Tooltip } from "@agentscope-ai/design";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { DownloadOutlined, ExportOutlined, LinkOutlined } from "@ant-design/icons";
+import { DownloadOutlined, ExportOutlined, LinkOutlined, SyncOutlined } from "@ant-design/icons";
 import styles from "./RemoteSkillLibraryModal.module.less";
 import { getApiUrl } from "../../../../api/config";
 import { buildAuthHeaders } from "../../../../api/authHeaders";
@@ -60,10 +60,29 @@ function resolveDisplayUrl(data: SkillhubMessage): string | null {
   return null;
 }
 
+async function checkSkillExists(skillName: string, endpoint: string): Promise<boolean> {
+  try {
+    const resp = await fetch(getApiUrl(endpoint), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...buildAuthHeaders(),
+      },
+      body: JSON.stringify({ skill_name: skillName }),
+    });
+    if (!resp.ok) return false;
+    const data = await resp.json();
+    return data.exists === true;
+  } catch {
+    return false;
+  }
+}
+
 export function RemoteSkillLibraryModal({
   open,
   onCancel,
   onDownloadSuccess,
+  poolMode = false,
 }: RemoteSkillLibraryModalProps) {
   const { t } = useTranslation();
   const { message } = useAppMessage();
@@ -71,6 +90,11 @@ export function RemoteSkillLibraryModal({
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
   const [downloadName, setDownloadName] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
+  const [skillExists, setSkillExists] = useState<boolean | null>(null);
+  const [checking, setChecking] = useState(false);
+
+  const downloadEndpoint = poolMode ? "/pool/skills/download" : "/skills/download";
+  const checkEndpoint = poolMode ? "/pool/skills/check" : "/skills/check";
 
   const displayUrl = useMemo(() => {
     try {
@@ -84,6 +108,8 @@ export function RemoteSkillLibraryModal({
     setRealUrl(SKILLHUB_HOME);
     setDownloadUrl(null);
     setDownloadName(null);
+    setSkillExists(null);
+    setChecking(false);
   }, []);
 
   useEffect(() => {
@@ -104,12 +130,21 @@ export function RemoteSkillLibraryModal({
         const parsed = parseDownloadUrlFromRoute(data.route);
         setDownloadUrl(parsed?.downloadUrl ?? null);
         setDownloadName(parsed?.downloadName ?? null);
+        setSkillExists(null);
+
+        // Check if skill exists when downloadName is available
+        if (parsed?.downloadName) {
+          setChecking(true);
+          checkSkillExists(parsed.downloadName, checkEndpoint)
+            .then(setSkillExists)
+            .finally(() => setChecking(false));
+        }
       }
     };
 
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, [open, resetState]);
+  }, [open, resetState, checkEndpoint]);
 
   const handleDownload = useCallback(async () => {
     if (!downloadUrl) return;
@@ -118,7 +153,7 @@ export function RemoteSkillLibraryModal({
     const target_name = downloadName?.trim() || "download";
     setDownloading(true);
     try {
-      const resp = await fetch(getApiUrl("/skills/download"), {
+      const resp = await fetch(getApiUrl(downloadEndpoint), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -136,65 +171,21 @@ export function RemoteSkillLibraryModal({
         throw new Error(text || `Download request failed: ${resp.status}`);
       }
 
-      const contentType = resp.headers.get("content-type") || "";
-
-      // Most likely: backend returns the zip as a binary attachment.
-      const looksLikeZip =
-        contentType.includes("application/zip") ||
-        contentType.includes("application/octet-stream") ||
-        (resp.headers.get("content-disposition") || "").includes("attachment");
-
-      if (looksLikeZip) {
-        const blob = await resp.blob();
-        const url = window.URL.createObjectURL(blob);
-
-        // Prefer filename from skillhub route `name=`; fallback to backend headers; then to target_name.
-        const preferredName = downloadName?.trim();
-        let filename = preferredName || target_name;
-        if (!preferredName) {
-          const cd = resp.headers.get("content-disposition") || "";
-          const filenameMatch = cd.match(
-            /filename\*?=(?:UTF-8'')?["']?([^"';\n]+)["']?/i,
-          );
-          if (filenameMatch?.[1]) {
-            filename = decodeURIComponent(filenameMatch[1]);
-          }
-        }
-
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = filename;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        window.URL.revokeObjectURL(url);
-
-        // Refresh skill list after download is fully processed.
+      const data = await resp.json();
+      if (data.success) {
+        message.success(t("skills.remoteSkillLibraryDownloadSuccess"));
+        setSkillExists(true);
         await onDownloadSuccess?.();
-        return;
       }
-
-      // Fallback: some APIs return JSON containing a downloadable URL.
-      const data = await resp.json().catch(() => null);
-      const downloadLink =
-        data?.url || data?.download_url || data?.downloadUrl || null;
-      if (typeof downloadLink === "string" && downloadLink) {
-        window.open(downloadLink, "_blank", "noopener,noreferrer");
-        await onDownloadSuccess?.();
-        return;
-      }
-
-      // Async backend mode: request accepted but processed server-side.
-      // Delay refresh to give the backend time to finish writing the skill.
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-      await onDownloadSuccess?.();
-      message.success(t("skills.remoteSkillLibraryDownloadSuccess"));
     } catch (err) {
       message.error(err instanceof Error ? err.message : String(err));
     } finally {
       setDownloading(false);
     }
-  }, [downloading, downloadUrl, downloadName, message, onDownloadSuccess, t]);
+  }, [downloading, downloadUrl, downloadName, message, onDownloadSuccess, t, downloadEndpoint]);
+
+  const isOverwrite = skillExists === true;
+  const buttonDisabled = !downloadUrl || downloading || checking;
 
   return (
     <Modal
@@ -210,11 +201,11 @@ export function RemoteSkillLibraryModal({
           <Button onClick={onCancel}>{t("common.cancel")}</Button>
           <Button
             type="primary"
-            icon={<DownloadOutlined />}
-            disabled={!downloadUrl || downloading}
+            icon={isOverwrite ? <SyncOutlined /> : <DownloadOutlined />}
+            disabled={buttonDisabled}
             onClick={handleDownload}
           >
-            {t("common.download")}
+            {isOverwrite ? t("common.overwrite") : t("common.download")}
           </Button>
         </div>
       }
