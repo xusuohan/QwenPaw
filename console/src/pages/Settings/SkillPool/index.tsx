@@ -338,6 +338,7 @@ function SkillPoolPage() {
         open={pool.remoteLibraryOpen}
         onCancel={pool.closeRemoteLibrary}
         onDownloadSuccess={pool.handleRefresh}
+        poolMode
       />
 
       {pool.conflictRenameModal}

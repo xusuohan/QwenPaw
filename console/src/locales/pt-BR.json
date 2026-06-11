@@ -9,6 +9,7 @@
     "create": "Criar",
     "upload": "Enviar",
     "download": "Baixar",
+    "overwrite": "Sobrescrever",
     "refresh": "Atualizar",
     "enable": "Ativar",
     "disable": "Desativar",

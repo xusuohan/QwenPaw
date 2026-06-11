@@ -100,7 +100,9 @@ function SkillsPage() {
       <RemoteSkillLibraryModal
         open={remoteLibraryOpen}
         onCancel={() => setRemoteLibraryOpen(false)}
-        onDownloadSuccess={refreshSkills}
+        onDownloadSuccess={() => {
+          hardRefresh();
+        }}
       />
 
       {!loading && skills.length > 0 && (
