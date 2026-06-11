@@ -5,12 +5,10 @@ set -eo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$REPO_ROOT"
 DIST="${DIST:-dist}"
-PORTABLE_DIR="${DIST}/QwenPaw-Portable"
+_TIMESTAMP="$(date '+%Y%m%d_%H%M%S')"
+PORTABLE_DIR="${DIST}/QwenPaw-Portable_${_TIMESTAMP}"
 
-echo "== Building portable version =="
-
-# 清理历史残留
-rm -rf "${PORTABLE_DIR}"
+echo "== Building portable version (timestamp: ${_TIMESTAMP}) =="
 
 # 根据当前平台构建（必须先构建，因为 wheel_build.sh 会清理 dist/）
 case "$(uname -s)" in
@@ -77,13 +75,10 @@ QwenPaw Portable
 - 需要在目标平台分别构建对应版本
 README
 
-# 清理 dist 中的中间产物，只保留便携版目录
-echo "== Cleaning dist build artifacts =="
+# 清理本次构建的中间产物，保留已有的便携版目录
+echo "== Cleaning build artifacts =="
 rm -f "${DIST}"/qwenpaw-env*.tar.gz
-rm -f "${DIST}"/qwenpaw-*.whl
-rm -f "${DIST}"/qwenpaw-*.tar.gz
 rm -f "${DIST}"/.DS_Store
-rm -rf "${DIST}/data"
 # 清理便携版目录中的 .DS_Store
 find "${PORTABLE_DIR}" -name ".DS_Store" -delete 2>/dev/null || true
 echo "== dist/ cleaned =="
