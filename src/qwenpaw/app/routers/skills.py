@@ -847,6 +847,35 @@ async def download_and_install_skill(
         # 如果需要复杂的重命名逻辑，可以扩展为 rename_map 参数
         parsed_rename = {}  # 实际重命名在 import_from_zip 中通过 target_name 处理
 
+    skill_service = SkillService(workspace_dir)
+
+    skill_name_to_check = body.target_name if body.target_name.strip() else None
+
+    if not skill_name_to_check:
+        import zipfile
+        import io
+        try:
+            with zipfile.ZipFile(io.BytesIO(zip_data)) as zf:
+                skill_dirs = [
+                    name.split('/')[0]
+                    for name in zf.namelist()
+                    if '/' in name and name.endswith('SKILL.md')
+                ]
+                if skill_dirs:
+                    skill_name_to_check = skill_dirs[0]
+        except Exception:
+            pass
+
+    should_overwrite = False
+    if skill_name_to_check:
+        skill_dir = get_workspace_skills_dir(workspace_dir) / skill_name_to_check
+        if skill_dir.exists():
+            should_overwrite = True
+            try:
+                skill_service.disable_skill(skill_name_to_check)
+            except Exception:
+                pass
+
     # 4. 导入 skill（复用现有的 import_from_zip 逻辑）
     try:
         result = await asyncio.to_thread(
@@ -863,7 +892,24 @@ async def download_and_install_skill(
 
     # 5. 检查冲突
     if result.get("conflicts"):
-        raise HTTPException(status_code=409, detail=result)
+        if should_overwrite and skill_name_to_check:
+            try:
+                skill_service.delete_skill(skill_name_to_check)
+                result = await asyncio.to_thread(
+                    skill_service.import_from_zip,
+                    data=zip_data,
+                    enable=body.enable,
+                    target_name=body.target_name,
+                    rename_map=parsed_rename,
+                )
+            except SkillScanError as exc:
+                return _scan_error_response(exc)
+            except (ValueError, AppBaseException) as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+            if result.get("conflicts"):
+                raise HTTPException(status_code=409, detail=result)
+        else:
+            raise HTTPException(status_code=409, detail=result)
 
     # 6. 如果启用且有导入，触发 agent 重载
     if body.enable and result.get("count", 0) > 0:
@@ -875,6 +921,7 @@ async def download_and_install_skill(
         "imported": result.get("imported", []),
         "count": result.get("count", 0),
         "source_url": body.zip_url,
+        "overwritten": should_overwrite,
     }
 
 
@@ -1112,6 +1159,136 @@ async def upload_workspace_skill_to_pool(
         status = 404 if result.get("reason") == "not_found" else 409
         raise HTTPException(status_code=status, detail=result)
     return result
+
+
+@router.post("/pool/check")
+async def check_pool_skill_exists(
+        request: Request,
+        skill_name: str = Body(..., embed=True),
+) -> dict[str, bool]:
+    """检查指定名称的技能是否存在于技能池中。
+
+    Args:
+        skill_name: 要检查的技能名称
+
+    Returns:
+        包含exists字段的字典，如果技能存在则返回True，否则返回False
+    """
+    pool_dir = get_skill_pool_dir()
+    skill_dir = pool_dir / skill_name
+    return {"exists": skill_dir.exists()}
+
+
+@router.post("/pool/download")
+async def download_pool_skill(
+        zip_url: str = Body(..., embed=True),
+        target_name: str = Body(default="", embed=True),
+        overwrite: bool = Body(default=True, embed=True),
+) -> dict[str, Any]:
+    """从 URL 下载技能 ZIP 并安装到技能池。
+
+    Args:
+        zip_url: 技能 ZIP 文件的下载 URL
+        target_name: 可选的重命名目标名称
+        overwrite: 如果技能池中已存在该技能，是否覆盖
+
+    Returns:
+        下载结果，包含成功状态和技能名称
+    """
+    try:
+        zip_data = await _download_zip_from_url(zip_url)
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Failed to download ZIP from URL: {exc}",
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Unexpected error downloading ZIP: {exc}",
+        ) from exc
+
+    parsed_rename: dict[str, str] | None = None
+    if target_name.strip():
+        parsed_rename = {}
+
+    skill_pool_service = SkillPoolService()
+
+    skill_name_to_check = target_name if target_name.strip() else None
+
+    if not skill_name_to_check:
+        import zipfile
+        import io
+        try:
+            with zipfile.ZipFile(io.BytesIO(zip_data)) as zf:
+                skill_dirs = [
+                    name.split('/')[0]
+                    for name in zf.namelist()
+                    if '/' in name and name.endswith('SKILL.md')
+                ]
+                if skill_dirs:
+                    skill_name_to_check = skill_dirs[0]
+        except Exception:
+            pass
+
+    should_overwrite = False
+    if skill_name_to_check:
+        pool_dir = get_skill_pool_dir()
+        skill_dir = pool_dir / skill_name_to_check
+        if skill_dir.exists():
+            should_overwrite = True
+            if not overwrite:
+                raise HTTPException(
+                    status_code=409,
+                    detail={
+                        "reason": "conflict",
+                        "skill_name": skill_name_to_check,
+                        "message": "Skill already exists in pool. Use overwrite=true to replace."
+                    }
+                )
+            try:
+                skill_pool_service.delete_skill(skill_name_to_check)
+            except Exception:
+                pass
+
+    try:
+        result = await asyncio.to_thread(
+            skill_pool_service.import_from_zip,
+            data=zip_data,
+            target_name=target_name,
+            rename_map=parsed_rename,
+        )
+    except SkillScanError as exc:
+        return _scan_error_response(exc)
+    except (ValueError, AppBaseException) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    if result.get("conflicts"):
+        if should_overwrite and skill_name_to_check:
+            try:
+                skill_pool_service.delete_skill(skill_name_to_check)
+                result = await asyncio.to_thread(
+                    skill_pool_service.import_from_zip,
+                    data=zip_data,
+                    target_name=target_name,
+                    rename_map=parsed_rename,
+                )
+            except SkillScanError as exc:
+                return _scan_error_response(exc)
+            except (ValueError, AppBaseException) as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+            if result.get("conflicts"):
+                raise HTTPException(status_code=409, detail=result)
+        else:
+            raise HTTPException(status_code=409, detail=result)
+
+    return {
+        "success": True,
+        "imported": result.get("imported", []),
+        "count": result.get("count", 0),
+        "source_url": zip_url,
+        "overwritten": should_overwrite,
+    }
 
 
 def _preflight_download_conflicts(
