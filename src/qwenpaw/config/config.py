@@ -1093,7 +1093,7 @@ class AgentsConfig(BaseModel):
         default_factory=lambda: {
             "default": AgentProfileRef(
                 id="default",
-                workspace_dir=f"{WORKING_DIR}/workspaces/default",
+                workspace_dir="workspaces/default",
             ),
         },
         description="Agent profile references (ID and workspace path only)",
