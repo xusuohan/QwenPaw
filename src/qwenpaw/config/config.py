@@ -1691,7 +1691,9 @@ def build_fallback_agent_profile_config(
         raise ValueError(f"Agent '{agent_id}' not found in config")
 
     agent_ref = config.agents.profiles[agent_id]
-    workspace_dir = Path(agent_ref.workspace_dir).expanduser()
+    from .utils import resolve_workspace_path
+
+    workspace_dir = resolve_workspace_path(agent_ref.workspace_dir)
     return AgentProfileConfig(
         id=agent_id,
         name=agent_id.title(),
@@ -1749,6 +1751,7 @@ def load_agent_config(agent_id: str) -> AgentProfileConfig:
     """
     from .utils import (
         load_config,
+        resolve_workspace_path,
         _agent_config_cache,
         _agent_config_lock,
     )
@@ -1762,7 +1765,7 @@ def load_agent_config(agent_id: str) -> AgentProfileConfig:
         )
 
     agent_ref = config.agents.profiles[agent_id]
-    workspace_dir = Path(agent_ref.workspace_dir).expanduser()
+    workspace_dir = resolve_workspace_path(agent_ref.workspace_dir)
     agent_config_path = workspace_dir / "agent.json"
 
     if not agent_config_path.exists():
@@ -1858,6 +1861,7 @@ def save_agent_config(
     """
     from .utils import (
         load_config,
+        resolve_workspace_path,
         _agent_config_cache,
         _agent_config_lock,
     )
@@ -1871,7 +1875,7 @@ def save_agent_config(
         )
 
     agent_ref = config.agents.profiles[agent_id]
-    workspace_dir = Path(agent_ref.workspace_dir).expanduser()
+    workspace_dir = resolve_workspace_path(agent_ref.workspace_dir)
     workspace_dir.mkdir(parents=True, exist_ok=True)
 
     agent_config_path = workspace_dir / "agent.json"
@@ -1896,7 +1900,7 @@ def migrate_legacy_config_to_multi_agent() -> bool:
     Returns:
         bool: True if migration was performed, False if already migrated
     """
-    from .utils import load_config, save_config
+    from .utils import load_config, resolve_workspace_path, save_config
 
     config = load_config()
 
@@ -1906,7 +1910,7 @@ def migrate_legacy_config_to_multi_agent() -> bool:
         # If it's already a AgentProfileRef, migration done
         if isinstance(agent_ref, AgentProfileRef):
             # Check if default agent config exists
-            workspace_dir = Path(agent_ref.workspace_dir).expanduser()
+            workspace_dir = resolve_workspace_path(agent_ref.workspace_dir)
             agent_config_path = workspace_dir / "agent.json"
             if agent_config_path.exists():
                 return False  # Already migrated
@@ -2000,7 +2004,7 @@ def migrate_legacy_config_to_multi_agent() -> bool:
         profiles={
             "default": AgentProfileRef(
                 id="default",
-                workspace_dir=str(default_workspace),
+                workspace_dir="workspaces/default",
             ),
         },
         # Preserve legacy fields with values from migrated agent config
