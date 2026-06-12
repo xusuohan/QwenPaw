@@ -67,6 +67,7 @@ def _normalize_working_dir_bound_paths(data: object) -> object:
     # portable paths that originated on a different machine.
     _WORKING_DIR_MARKERS = ("workspaces", "media")
 
+    # pylint: disable=too-many-return-statements
     def _rewrite_path_value(v: object) -> object:
         if not isinstance(v, str) or not v:
             return v
@@ -77,8 +78,9 @@ def _normalize_working_dir_bound_paths(data: object) -> object:
         if v.startswith(legacy_root_abs):
             return new_root_abs + v[len(legacy_root_abs) :]
         # Portable mode: absolute path from build/previous machine.
-        # If it contains a known WORKING_DIR subdirectory (e.g. workspaces/),
-        # remap the prefix so the suffix is preserved under current WORKING_DIR.
+        # If it contains a known WORKING_DIR subdirectory
+        # (e.g. workspaces/), remap the prefix so the suffix
+        # is preserved under current WORKING_DIR.
         for marker in _WORKING_DIR_MARKERS:
             for sep in ("/", "\\"):
                 needle = sep + marker + sep
@@ -104,6 +106,18 @@ def _normalize_working_dir_bound_paths(data: object) -> object:
         return obj
 
     return _walk(data, None)
+
+
+def resolve_workspace_path(path_str: str) -> Path:
+    """Resolve a workspace_dir value to an absolute Path.
+
+    - Relative paths: resolve against WORKING_DIR
+    - Absolute paths: expanduser() as-is (backward compat)
+    """
+    p = Path(path_str).expanduser()
+    if not p.is_absolute():
+        return WORKING_DIR / p
+    return p
 
 
 def _discover_system_chromium_path() -> Optional[str]:
