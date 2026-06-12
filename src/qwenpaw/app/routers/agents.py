@@ -27,7 +27,7 @@ from ...config.config import (
     sanitize_agent_id,
     validate_agent_id,
 )
-from ...config.utils import load_config, save_config
+from ...config.utils import load_config, save_config, resolve_workspace_path
 from ...agents.utils import copy_workspace_md_files, normalize_agent_language
 from ...agents.skills_manager import SkillPoolService, get_workspace_skills_dir
 from ..multi_agent_manager import MultiAgentManager
@@ -129,7 +129,7 @@ def _normalized_agent_order(config) -> list[str]:
 def _read_profile_description(workspace_dir: str) -> str:
     """Read description from PROFILE.md if exists."""
     try:
-        profile_path = Path(workspace_dir) / "PROFILE.md"
+        profile_path = resolve_workspace_path(workspace_dir) / "PROFILE.md"
         if not profile_path.exists():
             return ""
 
@@ -339,7 +339,7 @@ async def create_agent(
 
     agent_ref = AgentProfileRef(
         id=new_id,
-        workspace_dir=str(workspace_dir),
+        workspace_dir=f"workspaces/{new_id}",
         enabled=True,
     )
 
