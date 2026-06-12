@@ -78,6 +78,7 @@ README
 # 清理本次构建的中间产物，保留已有的便携版目录
 echo "== Cleaning build artifacts =="
 rm -f "${DIST}"/qwenpaw-env*.tar.gz
+rm -f "${DIST}"/*.whl
 rm -f "${DIST}"/.DS_Store
 # 清理便携版目录中的 .DS_Store
 find "${PORTABLE_DIR}" -name ".DS_Store" -delete 2>/dev/null || true
