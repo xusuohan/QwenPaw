@@ -11,11 +11,10 @@ Each Workspace represents a standalone agent workspace with its own:
 All existing single-agent components are reused without modification.
 """
 import logging
-from pathlib import Path
 from typing import Optional
 
 from qwenpaw.config.timezone import normalize_tz
-from qwenpaw.config.utils import load_config
+from qwenpaw.config.utils import load_config, resolve_workspace_path
 
 from .service_manager import ServiceDescriptor, ServiceManager
 from .service_factories import (
@@ -56,7 +55,7 @@ class Workspace:
             workspace_dir: Path to agent's workspace directory
         """
         self.agent_id = agent_id
-        self.workspace_dir = Path(workspace_dir).expanduser()
+        self.workspace_dir = resolve_workspace_path(workspace_dir)
         self.workspace_dir.mkdir(parents=True, exist_ok=True)
 
         # Service manager (unified component management)
