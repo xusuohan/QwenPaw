@@ -50,24 +50,47 @@ _agent_config_lock = threading.Lock()
 
 
 def _normalize_working_dir_bound_paths(data: object) -> object:
-    """Normalize legacy ~/.copaw-bound paths to current WORKING_DIR.
+    """Normalize paths to current WORKING_DIR.
 
-    This keeps QWENPAW_WORKING_DIR effective even if user config files contain
-    older hard-coded paths like "~/.copaw/media" or
-    "/Users/x/.copaw/workspaces/...".
-    Only rewrites known working-dir-bound keys.
+    Handles:
+    1. Legacy ~/.copaw paths → current WORKING_DIR
+    2. Portable mode: stale absolute paths from a different machine → current
+       WORKING_DIR
+
+    Only rewrites known working-dir-bound keys (workspace_dir, media_dir).
     """
     legacy_root_tilde = "~/.copaw"
     legacy_root_abs = str(Path(legacy_root_tilde).expanduser().resolve())
     new_root_abs = str(WORKING_DIR)
 
+    # Sub-directies that live under WORKING_DIR — used to detect stale
+    # portable paths that originated on a different machine.
+    _WORKING_DIR_MARKERS = ("workspaces", "media")
+
+    # pylint: disable=too-many-return-statements
     def _rewrite_path_value(v: object) -> object:
         if not isinstance(v, str) or not v:
+            return v
+        if v.startswith(new_root_abs):
             return v
         if v.startswith(legacy_root_tilde):
             return new_root_abs + v[len(legacy_root_tilde) :]
         if v.startswith(legacy_root_abs):
             return new_root_abs + v[len(legacy_root_abs) :]
+        # Portable mode: absolute path from build/previous machine.
+        # If it contains a known WORKING_DIR subdirectory
+        # (e.g. workspaces/), remap the prefix so the suffix
+        # is preserved under current WORKING_DIR.
+        for marker in _WORKING_DIR_MARKERS:
+            for sep in ("/", "\\"):
+                needle = sep + marker + sep
+                idx = v.rfind(needle)
+                if idx >= 0:
+                    suffix = v[idx + 1 :].replace("\\", "/")
+                    return str(WORKING_DIR / suffix)
+                needle_end = sep + marker
+                if v.endswith(needle_end):
+                    return str(WORKING_DIR / marker)
         return v
 
     def _walk(obj: object, key: str | None = None) -> object:
@@ -83,6 +106,18 @@ def _normalize_working_dir_bound_paths(data: object) -> object:
         return obj
 
     return _walk(data, None)
+
+
+def resolve_workspace_path(path_str: str) -> Path:
+    """Resolve a workspace_dir value to an absolute Path.
+
+    - Relative paths: resolve against WORKING_DIR
+    - Absolute paths: expanduser() as-is (backward compat)
+    """
+    p = Path(path_str).expanduser()
+    if not p.is_absolute():
+        return WORKING_DIR / p
+    return p
 
 
 def _discover_system_chromium_path() -> Optional[str]:
