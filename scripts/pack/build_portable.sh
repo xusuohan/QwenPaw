@@ -82,6 +82,11 @@ rm -f "${DIST}"/qwenpaw-*.whl
 rm -f "${DIST}"/.DS_Store
 # 清理便携版目录中的 .DS_Store
 find "${PORTABLE_DIR}" -name ".DS_Store" -delete 2>/dev/null || true
+# 清除扩展属性（避免复制到 exFAT U 盘后 com.apple.provenance 阻止删除/覆盖技能）
+if command -v xattr &>/dev/null; then
+  echo "== Stripping extended attributes =="
+  xattr -cr "${PORTABLE_DIR}" 2>/dev/null || true
+fi
 echo "== dist/ cleaned =="
 
 echo "== Portable version built at ${PORTABLE_DIR} =="
