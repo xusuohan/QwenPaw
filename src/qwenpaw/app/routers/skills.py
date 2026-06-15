@@ -1179,7 +1179,7 @@ async def check_pool_skill_exists(
     return {"exists": skill_dir.exists()}
 
 
-@router.post("/pool/download")
+@router.post("/pool/downloadFromHub")
 async def download_pool_skill(
         zip_url: str = Body(..., embed=True),
         target_name: str = Body(default="", embed=True),
