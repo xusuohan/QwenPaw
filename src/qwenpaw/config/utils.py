@@ -49,65 +49,6 @@ _agent_config_cache: dict[str, tuple[Any, float]] = {}
 _agent_config_lock = threading.Lock()
 
 
-def _normalize_working_dir_bound_paths(data: object) -> object:
-    """Normalize paths to current WORKING_DIR.
-
-    Handles:
-    1. Legacy ~/.copaw paths → current WORKING_DIR
-    2. Portable mode: stale absolute paths from a different machine → current
-       WORKING_DIR
-
-    Only rewrites known working-dir-bound keys (workspace_dir, media_dir).
-    """
-    legacy_root_tilde = "~/.copaw"
-    legacy_root_abs = str(Path(legacy_root_tilde).expanduser().resolve())
-    new_root_abs = str(WORKING_DIR)
-
-    # Sub-directies that live under WORKING_DIR — used to detect stale
-    # portable paths that originated on a different machine.
-    _WORKING_DIR_MARKERS = ("workspaces", "media")
-
-    # pylint: disable=too-many-return-statements
-    def _rewrite_path_value(v: object) -> object:
-        if not isinstance(v, str) or not v:
-            return v
-        if v.startswith(new_root_abs):
-            return v
-        if v.startswith(legacy_root_tilde):
-            return new_root_abs + v[len(legacy_root_tilde) :]
-        if v.startswith(legacy_root_abs):
-            return new_root_abs + v[len(legacy_root_abs) :]
-        # Portable mode: absolute path from build/previous machine.
-        # If it contains a known WORKING_DIR subdirectory
-        # (e.g. workspaces/), remap the prefix so the suffix
-        # is preserved under current WORKING_DIR.
-        for marker in _WORKING_DIR_MARKERS:
-            for sep in ("/", "\\"):
-                needle = sep + marker + sep
-                idx = v.rfind(needle)
-                if idx >= 0:
-                    suffix = v[idx + 1 :].replace("\\", "/")
-                    return str(WORKING_DIR / suffix)
-                needle_end = sep + marker
-                if v.endswith(needle_end):
-                    return str(WORKING_DIR / marker)
-        return v
-
-    def _walk(obj: object, key: str | None = None) -> object:
-        if isinstance(obj, dict):
-            out: dict = {}
-            for k, v in obj.items():
-                out[k] = _walk(v, str(k))
-            return out
-        if isinstance(obj, list):
-            return [_walk(x, key) for x in obj]
-        if key in {"workspace_dir", "media_dir"}:
-            return _rewrite_path_value(obj)
-        return obj
-
-    return _walk(data, None)
-
-
 def resolve_workspace_path(path_str: str) -> Path:
     """Resolve a workspace_dir value to an absolute Path.
 
@@ -118,6 +59,67 @@ def resolve_workspace_path(path_str: str) -> Path:
     if not p.is_absolute():
         return WORKING_DIR / p
     return p
+
+
+def rewrite_stale_paths_on_disk(config_path: Path | None = None) -> bool:
+    """Rewrite stale WORKING_DIR-bound paths in config.json to current paths.
+
+    Detects absolute paths that contain known WORKING_DIR subdirectory markers
+    (workspaces/, media/) but have a different prefix (from another machine),
+    and rewrites them to the current WORKING_DIR.
+
+    Returns True if any changes were written to disk.
+    """
+    if config_path is None:
+        config_path = get_config_path()
+    if not config_path.is_file():
+        return False
+
+    with open(config_path, "r", encoding="utf-8") as f:
+        raw = json.load(f)
+
+    modified = False
+    _WORKING_DIR_MARKERS = ("workspaces", "media")
+    new_root = str(WORKING_DIR)
+
+    def _rewrite(v: object) -> object:
+        nonlocal modified
+        if not isinstance(v, str) or not v or v.startswith(new_root):
+            return v
+        for marker in _WORKING_DIR_MARKERS:
+            for sep in ("/", "\\"):
+                needle = sep + marker + sep
+                idx = v.rfind(needle)
+                if idx >= 0:
+                    suffix = v[idx + 1 :].replace("\\", "/")
+                    new_val = str(WORKING_DIR / suffix)
+                    if new_val != v:
+                        modified = True
+                        return new_val
+                    return v
+                needle_end = sep + marker
+                if v.endswith(needle_end):
+                    new_val = str(WORKING_DIR / marker)
+                    if new_val != v:
+                        modified = True
+                        return new_val
+                    return v
+        return v
+
+    def _walk(obj: object, key: str | None = None) -> object:
+        if isinstance(obj, dict):
+            return {k: _walk(v, str(k)) for k, v in obj.items()}
+        if isinstance(obj, list):
+            return [_walk(x, key) for x in obj]
+        if key in {"workspace_dir", "media_dir"}:
+            return _rewrite(obj)
+        return obj
+
+    fixed = _walk(raw)
+    if modified:
+        with open(config_path, "w", encoding="utf-8") as f:
+            json.dump(fixed, f, indent=2, ensure_ascii=False)
+    return modified
 
 
 def _discover_system_chromium_path() -> Optional[str]:
@@ -585,7 +587,6 @@ def _load_and_validate_config(
     data: dict,
 ) -> Config:
     """Load and validate config data, handling validation errors."""
-    data = _normalize_working_dir_bound_paths(data)
     # Backward compat: top-level last_api_host / last_api_port -> last_api
     if "last_api_host" in data or "last_api_port" in data:
         la = data.setdefault("last_api", {})
@@ -679,7 +680,6 @@ def strict_validate_config_file(
     if data is None:
         return False, f"unreadable or invalid JSON — {config_path}"
 
-    data = _normalize_working_dir_bound_paths(data)
     if "last_api_host" in data or "last_api_port" in data:
         la = data.setdefault("last_api", {})
         if "host" not in la and "last_api_host" in data:

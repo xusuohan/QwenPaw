@@ -1826,18 +1826,6 @@ def load_agent_config(agent_id: str) -> AgentProfileConfig:
             except OSError:
                 pass
 
-        # Normalize legacy ~/.copaw-bound paths to current WORKING_DIR.
-        # This keeps QWENPAW_WORKING_DIR effective even if existing agent.json
-        # contains older hard-coded paths like "~/.copaw/media".
-        # NOTE: this transform is applied in-memory only; it must not be
-        # persisted back to disk.
-        try:
-            from .utils import _normalize_working_dir_bound_paths
-
-            data = _normalize_working_dir_bound_paths(data)
-        except Exception:
-            pass
-
         agent_config = AgentProfileConfig(**data)
 
         # Cache the config with its mtime
