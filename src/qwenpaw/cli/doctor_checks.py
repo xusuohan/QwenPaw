@@ -37,7 +37,6 @@ from ..config.config import (
     load_agent_config,
 )
 from ..config.utils import (
-    _normalize_working_dir_bound_paths,
     _read_config_data,
     get_config_path,
     get_jobs_path,
@@ -766,10 +765,6 @@ def _read_workspace_agent_json(ref: AgentProfileRef) -> dict[str, Any] | None:
         return None
     if not isinstance(data, dict):
         return None
-    try:
-        data = _normalize_working_dir_bound_paths(data)
-    except Exception:  # pylint: disable=broad-exception-caught
-        pass
     return data
 
 

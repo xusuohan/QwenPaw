@@ -44,7 +44,6 @@ from ..config.config import (
     build_fallback_agent_profile_config,
 )
 from ..config.utils import (
-    _normalize_working_dir_bound_paths,
     read_last_api,
     strict_validate_config_file,
 )
@@ -154,10 +153,6 @@ def _workspace_agent_json_valid(path: Path) -> bool:
         return False
     if not isinstance(raw, dict):
         return False
-    try:
-        raw = _normalize_working_dir_bound_paths(raw)
-    except Exception:  # pylint: disable=broad-exception-caught
-        pass
     try:
         AgentProfileConfig.model_validate(raw)
     except Exception:  # pylint: disable=broad-exception-caught
