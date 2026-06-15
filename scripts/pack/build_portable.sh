@@ -77,11 +77,14 @@ README
 
 # 清理本次构建的中间产物，保留已有的便携版目录
 echo "== Cleaning build artifacts =="
-rm -f "${DIST}"/qwenpaw-env*.tar.gz
-rm -f "${DIST}"/qwenpaw-*.whl
-rm -f "${DIST}"/.DS_Store
-# 清理便携版目录中的 .DS_Store
+# 删除 dist/ 下所有非 QwenPaw-Portable_* 目录的文件和目录
+find "${DIST}" -maxdepth 1 \
+  ! -name "$(basename "${DIST}")" \
+  ! -name "QwenPaw-Portable_*" \
+  -exec rm -rf {} + 2>/dev/null || true
+# 清理便携版目录中的 .DS_Store 和 __pycache__
 find "${PORTABLE_DIR}" -name ".DS_Store" -delete 2>/dev/null || true
+find "${PORTABLE_DIR}" -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 # 清除扩展属性（避免复制到 exFAT U 盘后 com.apple.provenance 阻止删除/覆盖技能）
 if command -v xattr &>/dev/null; then
   echo "== Stripping extended attributes =="
