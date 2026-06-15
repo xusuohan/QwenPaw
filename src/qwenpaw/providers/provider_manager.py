@@ -864,7 +864,7 @@ PROVIDER_OCTOKEN = OpenAIProvider(
 PROVIDER_1Xm = OpenAIProvider(
     id="1xm",
     name="1Xm",
-    base_url=" https://1xm.ai/v1",
+    base_url="https://api.1xm.ai/v1",
     api_key_prefix="",
     models=[],
     freeze_url=True,
@@ -1034,34 +1034,33 @@ class ProviderManager:  # pylint: disable=too-many-public-methods
     def _init_builtins(self):
         self._add_builtin(PROVIDER_OCTOKEN)
         self._add_builtin(PROVIDER_1Xm)
-
-        # self._add_builtin(PROVIDER_QWENPAW)
-        # self._add_builtin(PROVIDER_OLLAMA)
-        # self._add_builtin(PROVIDER_LMSTUDIO)
-        # self._add_builtin(PROVIDER_OPENROUTER)
-        # self._add_builtin(PROVIDER_MODELSCOPE)
-        # self._add_builtin(PROVIDER_DASHSCOPE)
-        # self._add_builtin(PROVIDER_ALIYUN_CODINGPLAN)
-        # self._add_builtin(PROVIDER_ALIYUN_CODINGPLAN_INTL)
-        # self._add_builtin(PROVIDER_ALIYUN_TOKENPLAN)
-        # self._add_builtin(PROVIDER_OPENCODE)
-        # self._add_builtin(PROVIDER_OPENAI)
-        # self._add_builtin(PROVIDER_AZURE_OPENAI)
-        # self._add_builtin(PROVIDER_ANTHROPIC)
-        # self._add_builtin(PROVIDER_GEMINI)
-        # self._add_builtin(PROVIDER_DEEPSEEK)
-        # self._add_builtin(PROVIDER_KIMI_CN)
-        # self._add_builtin(PROVIDER_KIMI_INTL)
-        # self._add_builtin(PROVIDER_MINIMAX_CN)
-        # self._add_builtin(PROVIDER_MINIMAX)
-        # self._add_builtin(PROVIDER_ZHIPU_CN)
-        # self._add_builtin(PROVIDER_ZHIPU_CN_CODINGPLAN)
-        # self._add_builtin(PROVIDER_ZHIPU_INTL)
-        # self._add_builtin(PROVIDER_ZHIPU_INTL_CODINGPLAN)
-        # self._add_builtin(PROVIDER_SILICONFLOW_CN)
-        # self._add_builtin(PROVIDER_SILICONFLOW_INTL)
-        # self._add_builtin(PROVIDER_VOLCENGINE_CN)
-        # self._add_builtin(PROVIDER_VOLCENGINE_CN_CODINGPLAN)
+        self._add_builtin(PROVIDER_QWENPAW)
+        self._add_builtin(PROVIDER_OLLAMA)
+        self._add_builtin(PROVIDER_LMSTUDIO)
+        self._add_builtin(PROVIDER_OPENROUTER)
+        self._add_builtin(PROVIDER_MODELSCOPE)
+        self._add_builtin(PROVIDER_DASHSCOPE)
+        self._add_builtin(PROVIDER_ALIYUN_CODINGPLAN)
+        self._add_builtin(PROVIDER_ALIYUN_CODINGPLAN_INTL)
+        self._add_builtin(PROVIDER_ALIYUN_TOKENPLAN)
+        self._add_builtin(PROVIDER_OPENCODE)
+        self._add_builtin(PROVIDER_OPENAI)
+        self._add_builtin(PROVIDER_AZURE_OPENAI)
+        self._add_builtin(PROVIDER_ANTHROPIC)
+        self._add_builtin(PROVIDER_GEMINI)
+        self._add_builtin(PROVIDER_DEEPSEEK)
+        self._add_builtin(PROVIDER_KIMI_CN)
+        self._add_builtin(PROVIDER_KIMI_INTL)
+        self._add_builtin(PROVIDER_MINIMAX_CN)
+        self._add_builtin(PROVIDER_MINIMAX)
+        self._add_builtin(PROVIDER_ZHIPU_CN)
+        self._add_builtin(PROVIDER_ZHIPU_CN_CODINGPLAN)
+        self._add_builtin(PROVIDER_ZHIPU_INTL)
+        self._add_builtin(PROVIDER_ZHIPU_INTL_CODINGPLAN)
+        self._add_builtin(PROVIDER_SILICONFLOW_CN)
+        self._add_builtin(PROVIDER_SILICONFLOW_INTL)
+        self._add_builtin(PROVIDER_VOLCENGINE_CN)
+        self._add_builtin(PROVIDER_VOLCENGINE_CN_CODINGPLAN)
 
     def _add_builtin(self, provider: Provider):
         self.builtin_providers[provider.id] = provider
