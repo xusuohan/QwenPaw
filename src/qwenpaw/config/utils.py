@@ -61,7 +61,7 @@ def resolve_workspace_path(path_str: str) -> Path:
     return p
 
 
-def rewrite_stale_paths_on_disk(config_path: Path | None = None) -> bool:
+def rewrite_stale_paths_on_disk(config_path: Optional[Path] = None) -> bool:
     """Rewrite stale WORKING_DIR-bound paths in config.json to current paths.
 
     Detects absolute paths that contain known WORKING_DIR subdirectory markers
@@ -75,8 +75,15 @@ def rewrite_stale_paths_on_disk(config_path: Path | None = None) -> bool:
     if not config_path.is_file():
         return False
 
-    with open(config_path, "r", encoding="utf-8") as f:
-        raw = json.load(f)
+    try:
+        with open(config_path, "r", encoding="utf-8") as f:
+            raw = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        logger.error(
+            "Failed to read config %s for stale-path rewrite",
+            config_path,
+        )
+        return False
 
     modified = False
     _WORKING_DIR_MARKERS = ("workspaces", "media")
@@ -117,8 +124,16 @@ def rewrite_stale_paths_on_disk(config_path: Path | None = None) -> bool:
 
     fixed = _walk(raw)
     if modified:
-        with open(config_path, "w", encoding="utf-8") as f:
-            json.dump(fixed, f, indent=2, ensure_ascii=False)
+        try:
+            with open(config_path, "w", encoding="utf-8") as f:
+                json.dump(fixed, f, indent=2, ensure_ascii=False)
+        except OSError as exc:
+            logger.error(
+                "Failed to write stale-path rewrite to %s: %s",
+                config_path,
+                exc,
+            )
+            return False
     return modified
 
 
