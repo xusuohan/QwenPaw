@@ -137,6 +137,72 @@ def rewrite_stale_paths_on_disk(config_path: Optional[Path] = None) -> bool:
     return modified
 
 
+def rewrite_stale_agent_json_on_disk() -> int:
+    """Rewrite stale paths in all ``workspaces/*/agent.json`` files.
+
+    Scans each workspace under ``WORKING_DIR/workspaces/`` for an
+    ``agent.json`` and applies the same stale-path rewrite logic as
+    :func:`rewrite_stale_paths_on_disk`.
+
+    Returns the number of files modified.
+    """
+    _WORKING_DIR_MARKERS = ("workspaces", "media")
+    new_root = str(WORKING_DIR)
+    workspaces_dir = WORKING_DIR / "workspaces"
+    if not workspaces_dir.is_dir():
+        return 0
+
+    def _rewrite(v: object) -> object:
+        if not isinstance(v, str) or not v or v.startswith(new_root):
+            return v
+        for marker in _WORKING_DIR_MARKERS:
+            for sep in ("/", "\\"):
+                needle = sep + marker + sep
+                idx = v.rfind(needle)
+                if idx >= 0:
+                    suffix = v[idx + 1 :].replace("\\", "/")
+                    return str(WORKING_DIR / suffix)
+                needle_end = sep + marker
+                if v.endswith(needle_end):
+                    return str(WORKING_DIR / marker)
+        return v
+
+    def _walk(obj: object, key: str | None = None) -> object:
+        if isinstance(obj, dict):
+            return {k: _walk(v, str(k)) for k, v in obj.items()}
+        if isinstance(obj, list):
+            return [_walk(x, key) for x in obj]
+        if key in {"workspace_dir", "media_dir"}:
+            return _rewrite(obj)
+        return obj
+
+    count = 0
+    for agent_json in sorted(workspaces_dir.glob("*/agent.json")):
+        try:
+            with open(agent_json, "r", encoding="utf-8") as f:
+                raw = json.load(f)
+        except (OSError, json.JSONDecodeError):
+            logger.error(
+                "Failed to read %s for stale-path rewrite",
+                agent_json,
+            )
+            continue
+
+        fixed = _walk(raw)
+        if fixed != raw:
+            try:
+                with open(agent_json, "w", encoding="utf-8") as f:
+                    json.dump(fixed, f, indent=2, ensure_ascii=False)
+                count += 1
+            except OSError as exc:
+                logger.error(
+                    "Failed to write stale-path rewrite to %s: %s",
+                    agent_json,
+                    exc,
+                )
+    return count
+
+
 def _discover_system_chromium_path() -> Optional[str]:
     """Scan common locations for Chrome/Chromium/Edge so we can use existing
     browser instead of downloading via Playwright. Returns first found path.
