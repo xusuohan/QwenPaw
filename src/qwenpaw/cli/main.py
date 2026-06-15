@@ -143,6 +143,11 @@ class LazyGroup(click.Group):
         ),
         "task": ("qwenpaw.cli.task_cmd", "task_cmd", ".task_cmd"),
         "doctor": ("qwenpaw.cli.doctor_cmd", "doctor_cmd", ".doctor_cmd"),
+        "fix-paths": (
+            "qwenpaw.cli.fix_paths_cmd",
+            "fix_paths_cmd",
+            ".fix_paths_cmd",
+        ),
     },
 )
 @click.version_option(version=__version__, prog_name="QwenPaw")
