@@ -32,6 +32,7 @@ from ...agents.skills_hub import (
 )
 from ...agents.skills_manager import (
     _BUILTIN_SKILL_LANGUAGES,
+    _safe_rmtree,
     SkillConflictError,
     SkillPoolService,
     SkillInfo,
@@ -202,8 +203,10 @@ class CreateSkillRequest(BaseModel):
     config: dict[str, Any] | None = None
     enable: bool = True
 
+
 class DownloadSkillRequest(BaseModel):
     """从 URL 下载并安装 skill 的请求体"""
+
     zip_url: str = Field(..., description="Skill ZIP 文件的下载 URL")
     enable: bool = Field(default=True, description="安装后是否立即启用")
     target_name: str = Field(default="", description="可选的重命名目标名称")
@@ -328,7 +331,7 @@ def _restore_workspace_skill(snapshot: dict[str, Any]) -> None:
     entry = snapshot.get("entry")
 
     if skill_dir.exists():
-        shutil.rmtree(skill_dir)
+        _safe_rmtree(skill_dir)
     if backup_dir is not None and Path(backup_dir).exists():
         shutil.copytree(Path(backup_dir), skill_dir)
 
@@ -798,8 +801,8 @@ async def create_skill(
 
 @router.post("/check")
 async def check_skill_exists(
-        request: Request,
-        skill_name: str = Body(..., embed=True),
+    request: Request,
+    skill_name: str = Body(..., embed=True),
 ) -> dict[str, bool]:
     """检查指定名称的技能是否存在于当前工作区。
 
@@ -819,7 +822,7 @@ async def check_skill_exists(
 async def download_and_install_skill(
     request: Request,
     body: DownloadSkillRequest,
-)-> dict[str, Any]:
+) -> dict[str, Any]:
     from ..agent_context import get_agent_for_request
 
     # 1. 获取当前 workspace
@@ -849,17 +852,20 @@ async def download_and_install_skill(
 
     skill_service = SkillService(workspace_dir)
 
-    skill_name_to_check = body.target_name if body.target_name.strip() else None
+    skill_name_to_check = (
+        body.target_name if body.target_name.strip() else None
+    )
 
     if not skill_name_to_check:
         import zipfile
         import io
+
         try:
             with zipfile.ZipFile(io.BytesIO(zip_data)) as zf:
                 skill_dirs = [
-                    name.split('/')[0]
+                    name.split("/")[0]
                     for name in zf.namelist()
-                    if '/' in name and name.endswith('SKILL.md')
+                    if "/" in name and name.endswith("SKILL.md")
                 ]
                 if skill_dirs:
                     skill_name_to_check = skill_dirs[0]
@@ -868,7 +874,9 @@ async def download_and_install_skill(
 
     should_overwrite = False
     if skill_name_to_check:
-        skill_dir = get_workspace_skills_dir(workspace_dir) / skill_name_to_check
+        skill_dir = (
+            get_workspace_skills_dir(workspace_dir) / skill_name_to_check
+        )
         if skill_dir.exists():
             should_overwrite = True
             try:
@@ -926,8 +934,7 @@ async def download_and_install_skill(
 
 
 async def _download_zip_from_url(url: str, timeout: int = 30) -> bytes:
-    """从 URL 下载 ZIP 文件并进行基本验证。
-    """
+    """从 URL 下载 ZIP 文件并进行基本验证。"""
     # 1. 验证 URL 格式
     if not url.startswith(("http://", "https://")):
         raise HTTPException(
@@ -966,6 +973,7 @@ async def _download_zip_from_url(url: str, timeout: int = 30) -> bytes:
     # 4. 验证是否为有效的 ZIP 文件
     import zipfile
     import io
+
     try:
         with zipfile.ZipFile(io.BytesIO(zip_data)) as zf:
             # 尝试读取 ZIP 信息以验证有效性
@@ -977,6 +985,7 @@ async def _download_zip_from_url(url: str, timeout: int = 30) -> bytes:
         )
 
     return zip_data
+
 
 @router.post("/upload")
 async def upload_skill_zip(
@@ -1163,8 +1172,8 @@ async def upload_workspace_skill_to_pool(
 
 @router.post("/pool/check")
 async def check_pool_skill_exists(
-        request: Request,
-        skill_name: str = Body(..., embed=True),
+    request: Request,
+    skill_name: str = Body(..., embed=True),
 ) -> dict[str, bool]:
     """检查指定名称的技能是否存在于技能池中。
 
@@ -1181,9 +1190,9 @@ async def check_pool_skill_exists(
 
 @router.post("/pool/downloadFromHub")
 async def download_pool_skill(
-        zip_url: str = Body(..., embed=True),
-        target_name: str = Body(default="", embed=True),
-        overwrite: bool = Body(default=True, embed=True),
+    zip_url: str = Body(..., embed=True),
+    target_name: str = Body(default="", embed=True),
+    overwrite: bool = Body(default=True, embed=True),
 ) -> dict[str, Any]:
     """从 URL 下载技能 ZIP 并安装到技能池。
 
@@ -1219,12 +1228,13 @@ async def download_pool_skill(
     if not skill_name_to_check:
         import zipfile
         import io
+
         try:
             with zipfile.ZipFile(io.BytesIO(zip_data)) as zf:
                 skill_dirs = [
-                    name.split('/')[0]
+                    name.split("/")[0]
                     for name in zf.namelist()
-                    if '/' in name and name.endswith('SKILL.md')
+                    if "/" in name and name.endswith("SKILL.md")
                 ]
                 if skill_dirs:
                     skill_name_to_check = skill_dirs[0]
@@ -1243,8 +1253,8 @@ async def download_pool_skill(
                     detail={
                         "reason": "conflict",
                         "skill_name": skill_name_to_check,
-                        "message": "Skill already exists in pool. Use overwrite=true to replace."
-                    }
+                        "message": "Skill already exists in pool. Use overwrite=true to replace.",
+                    },
                 )
             try:
                 skill_pool_service.delete_skill(skill_name_to_check)
