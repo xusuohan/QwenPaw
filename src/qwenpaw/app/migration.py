@@ -26,7 +26,7 @@ from ..constant import (
     LEGACY_QA_AGENT_ID,
     WORKING_DIR,
 )
-from ..config.utils import load_config, save_config
+from ..config.utils import load_config, resolve_workspace_path, save_config
 
 logger = logging.getLogger(__name__)
 
@@ -101,7 +101,7 @@ def _do_migrate_legacy_workspace() -> bool:
     if "default" in config.agents.profiles:
         agent_ref = config.agents.profiles["default"]
         if isinstance(agent_ref, AgentProfileRef):
-            workspace_dir = Path(agent_ref.workspace_dir).expanduser()
+            workspace_dir = resolve_workspace_path(agent_ref.workspace_dir)
             agent_config_path = workspace_dir / "agent.json"
             if agent_config_path.exists():
                 logger.debug(
@@ -126,7 +126,7 @@ def _do_migrate_legacy_workspace() -> bool:
         id="default",
         name="Default Agent",
         description="Default QwenPaw agent (migrated from legacy config)",
-        workspace_dir=str(default_workspace),
+        workspace_dir="workspaces/default",
         channels=config.channels if hasattr(config, "channels") else None,
         mcp=config.mcp if hasattr(config, "mcp") else None,
         heartbeat=(
@@ -198,7 +198,7 @@ def _do_migrate_legacy_workspace() -> bool:
         profiles={
             "default": AgentProfileRef(
                 id="default",
-                workspace_dir=str(default_workspace),
+                workspace_dir="workspaces/default",
             ),
         },
         # Preserve legacy fields with values from migrated agent config
@@ -449,7 +449,7 @@ def _do_migrate_legacy_skills() -> bool:
     seen_workspaces: set[str] = set()
     for profile in config.agents.profiles.values():
         _register_workspace(
-            Path(profile.workspace_dir).expanduser(),
+            resolve_workspace_path(profile.workspace_dir),
             workspace_dirs,
             seen_workspaces,
         )
@@ -665,7 +665,7 @@ def _do_ensure_default_agent() -> None:
     # Get or determine default workspace path
     if "default" in config.agents.profiles:
         agent_ref = config.agents.profiles["default"]
-        default_workspace = Path(agent_ref.workspace_dir).expanduser()
+        default_workspace = resolve_workspace_path(agent_ref.workspace_dir)
         agent_existed = True
     else:
         default_workspace = Path(
@@ -693,7 +693,7 @@ def _do_ensure_default_agent() -> None:
         # Add default agent reference to config
         config.agents.profiles["default"] = AgentProfileRef(
             id="default",
-            workspace_dir=str(default_workspace),
+            workspace_dir="workspaces/default",
         )
 
         # Set as active if no active agent
@@ -726,7 +726,7 @@ def _other_agent_owns_workspace(
     for aid, ref in profiles.items():
         if aid == builtin_id:
             continue
-        other = Path(ref.workspace_dir).expanduser()
+        other = resolve_workspace_path(ref.workspace_dir)
         try:
             other_res = other.resolve()
         except OSError:
@@ -829,7 +829,7 @@ def _do_ensure_qa_agent() -> None:
 
     if qa_id in config.agents.profiles:
         agent_ref = config.agents.profiles[qa_id]
-        qa_workspace = Path(agent_ref.workspace_dir).expanduser()
+        qa_workspace = resolve_workspace_path(agent_ref.workspace_dir)
         agent_existed = True
     else:
         qa_workspace = Path(
@@ -877,7 +877,7 @@ def _do_ensure_qa_agent() -> None:
 
     config.agents.profiles[qa_id] = AgentProfileRef(
         id=qa_id,
-        workspace_dir=str(qa_workspace),
+        workspace_dir=f"workspaces/{qa_id}",
     )
     _apply_legacy_qa_disable_for_migration(config)
     save_config(config)
