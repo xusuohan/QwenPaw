@@ -121,8 +121,10 @@ $_7z = Get-Command 7z -ErrorAction SilentlyContinue
 if ($_7z) {
   Write-Host "[build_win_portable] Using 7-Zip for fast extraction..."
   & 7z x $Archive -o"$WinDir" -y -aoa | Select-Object -Last 3
-} else {
-  Expand-Archive -Path $Archive -DestinationPath $WinDir -Force
+ } else {
+   Write-Host "[build_win_portable] Using Python for extraction (MAX_PATH safe)..."
+   & $PythonCmd $PackDir\extract_zip.py $Archive $WinDir
+   if ($LASTEXITCODE -ne 0) { throw "extract_zip.py failed with exit code $LASTEXITCODE" }
 }
 
 # Find actual env root (archive may have a top-level directory)
