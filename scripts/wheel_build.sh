@@ -29,7 +29,8 @@ if [ ! -d "$BUILD_VENV" ]; then
   python3 -m venv "$BUILD_VENV"
 fi
 "$BUILD_VENV/bin/pip" install --quiet build
-rm -rf dist/*
+# 只清理 wheel 构建产物，不要全删 dist/（里面可能已有历史 QwenPaw-Portable_* 便携版）
+rm -rf dist/qwenpaw-*.whl dist/qwenpaw-*.tar.gz build/ src/*.egg-info
 "$BUILD_VENV/bin/python" -m build --outdir dist .
 
 echo "[wheel_build] Done. Wheel(s) in: $REPO_ROOT/dist/"
