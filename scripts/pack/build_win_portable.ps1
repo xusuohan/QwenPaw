@@ -283,6 +283,9 @@ if not exist "%QWENPAW_WORKING_DIR%\config.json" (
   "%~dp0env\python.exe" -u -m qwenpaw init --defaults --accept-security
 )
 
+REM Rewrite stale paths from previous device
+"%~dp0env\python.exe" -u -m qwenpaw fix-paths
+
 REM Launch
 "%~dp0env\python.exe" -u -m qwenpaw desktop --log-level %QWENPAW_LOG_LEVEL%
 
@@ -366,6 +369,10 @@ if not exist "%QWENPAW_WORKING_DIR%\config.json" (
   echo [Init] Creating config...
   "%~dp0env\python.exe" -u -m qwenpaw init --defaults --accept-security
 )
+
+REM Rewrite stale paths from previous device
+"%~dp0env\python.exe" -u -m qwenpaw fix-paths
+
 echo [Launch] Starting QwenPaw Desktop with log-level=%QWENPAW_LOG_LEVEL%...
 echo Press Ctrl+C to stop
 echo.

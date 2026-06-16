@@ -117,6 +117,9 @@ if [ ! -f "$CONFIG_FILE" ]; then
   "$ENV_DIR/bin/python" -u -m qwenpaw init --defaults --accept-security
 fi
 
+# 重写陈旧路径（跨设备迁移时修正 config.json 中的绝对路径）
+"$ENV_DIR/bin/python" -u -m qwenpaw fix-paths
+
 # 非 TTY 模式：设置日志重定向
 if [ ! -t 2 ]; then
   mkdir -p "$(dirname "$LOG")"

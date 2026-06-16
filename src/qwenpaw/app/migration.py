@@ -198,7 +198,7 @@ def _do_migrate_legacy_workspace() -> bool:
         profiles={
             "default": AgentProfileRef(
                 id="default",
-                workspace_dir="workspaces/default",
+                workspace_dir=str(WORKING_DIR / "workspaces/default"),
             ),
         },
         # Preserve legacy fields with values from migrated agent config
@@ -693,7 +693,7 @@ def _do_ensure_default_agent() -> None:
         # Add default agent reference to config
         config.agents.profiles["default"] = AgentProfileRef(
             id="default",
-            workspace_dir="workspaces/default",
+            workspace_dir=str(WORKING_DIR / "workspaces/default"),
         )
 
         # Set as active if no active agent
@@ -877,7 +877,7 @@ def _do_ensure_qa_agent() -> None:
 
     config.agents.profiles[qa_id] = AgentProfileRef(
         id=qa_id,
-        workspace_dir=f"workspaces/{qa_id}",
+        workspace_dir=str(WORKING_DIR / f"workspaces/{qa_id}"),
     )
     _apply_legacy_qa_disable_for_migration(config)
     save_config(config)
