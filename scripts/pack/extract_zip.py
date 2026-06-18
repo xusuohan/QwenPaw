@@ -35,12 +35,15 @@ def extract(archive: str, dest: str) -> None:
                 parent = os.path.dirname(target)
                 if parent:
                     os.makedirs(parent, exist_ok=True)
-                # Manual extract with stream (z.extract fails with \\?\ prefix + /)
+                # Manual extract with stream (z.extract fails with \\?\ prefix + /).
+                # 1 MB buffer is the sweet spot on Windows: large enough to
+                # amortize per-write syscall/MFT overhead, small enough to
+                # stay in the L2 cache for the common small-file case.
                 with z.open(entry) as src, open(target, "wb") as dst:
-                    buf = src.read(65536)
+                    buf = src.read(1 << 20)
                     while buf:
                         dst.write(buf)
-                        buf = src.read(65536)
+                        buf = src.read(1 << 20)
 
         print(f"[extract_zip] Complete: {total} entries extracted")
 
