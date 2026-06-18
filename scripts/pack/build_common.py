@@ -14,6 +14,7 @@ import random
 import string
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -202,20 +203,41 @@ def main() -> int:
             # Prevent pip from installing to user site-packages
             install_env["PYTHONNOUSERSITE"] = "1"
 
-            _run(
-                [
-                    conda,
-                    "run",
-                    "-n",
-                    env_name,
-                    "python",
-                    "-m",
-                    "pip",
-                    "install",
-                    f"qwenpaw @ {wheel_uri}",
-                ],
-                env=install_env,
-            )
+            pip_cmd = [
+                conda,
+                "run",
+                "-n",
+                env_name,
+                "python",
+                "-m",
+                "pip",
+                "install",
+                "--retries",
+                "3",
+                "--timeout",
+                "120",
+                f"qwenpaw @ {wheel_uri}",
+            ]
+            _max_retries = 2
+            for _attempt in range(_max_retries + 1):
+                try:
+                    _run(pip_cmd, env=install_env)
+                    break
+                except subprocess.CalledProcessError as e:
+                    if _attempt < _max_retries:
+                        print(
+                            f"pip install failed (attempt {_attempt + 1}/"
+                            f"{_max_retries + 1}), retrying..."
+                        )
+                        time.sleep(5)
+                    else:
+                        print(
+                            f"ERROR: pip install failed after "
+                            f"{_max_retries + 1} attempts. "
+                            f"Exit code: {e.returncode}",
+                            file=sys.stderr,
+                        )
+                        raise
             print("Verifying certifi is installed (required for SSL)...")
             _run(
                 [
@@ -226,6 +248,37 @@ def main() -> int:
                     "python",
                     "-c",
                     "import certifi; print(f'certifi OK: {certifi.where()}')",
+                ],
+            )
+            # Remove large transitive deps never imported by qwenpaw
+            _unused_packages = ["kubernetes", "sympy"]
+            print(f"Removing unused packages: {_unused_packages}")
+            _run(
+                [
+                    conda,
+                    "run",
+                    "-n",
+                    env_name,
+                    "python",
+                    "-m",
+                    "pip",
+                    "uninstall",
+                    *_unused_packages,
+                    "-y",
+                ],
+            )
+            # Clean pip cache to reduce packed size
+            _run(
+                [
+                    conda,
+                    "run",
+                    "-n",
+                    env_name,
+                    "python",
+                    "-m",
+                    "pip",
+                    "cache",
+                    "purge",
                 ],
             )
             if args.cache_wheels:
@@ -287,7 +340,7 @@ def main() -> int:
         ]
         if args.format != "infer":
             pack_cmd.extend(["--format", args.format])
-        pack_cmd.extend(["--compress-level", "1"])
+        pack_cmd.extend(["--compress-level", "4"])
         _run(pack_cmd)
         print(f"Packed to {out_path}")
     finally:

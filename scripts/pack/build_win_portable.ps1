@@ -103,7 +103,7 @@ if (-not $PythonCmd) {
 }
 Write-Host "[build_win_portable] Using Python: $PythonCmd"
 
-& $PythonCmd $PackDir\build_common.py --output $Archive --format zip --cache-wheels
+& $PythonCmd $PackDir\build_common.py --output $Archive --format zip
 if ($LASTEXITCODE -ne 0) {
   throw "build_common.py failed with exit code $LASTEXITCODE"
 }
@@ -112,60 +112,60 @@ if (-not (Test-Path $Archive)) {
 }
 
 # --- Unpack into portable directory ---
+# Extract directly into env/ subdir to avoid a post-extraction Move-Item.
+# Move-Item fails on Windows when individual file paths exceed MAX_PATH (260)
+# — common in site-packages with deeply nested __pycache__/*.pyc files.
+# 7z and extract_zip.py both handle long paths at write time, so writing
+# straight to env/ sidesteps the limit entirely.
 Write-Host "== Unpacking env into portable directory =="
 if (Test-Path $WinDir) { Remove-Item -Recurse -Force $WinDir }
 New-Item -ItemType Directory -Force -Path $WinDir | Out-Null
+New-Item -ItemType Directory -Force -Path $EnvDir | Out-Null
 
-Write-Host "[build_win_portable] Extracting $Archive -> $WinDir"
+Write-Host "[build_win_portable] Extracting $Archive -> $EnvDir"
+$extractStart = Get-Date
 $_7z = Get-Command 7z -ErrorAction SilentlyContinue
 if ($_7z) {
   Write-Host "[build_win_portable] Using 7-Zip for fast extraction..."
-  & 7z x $Archive -o"$WinDir" -y -aoa | Select-Object -Last 3
- } else {
-   Write-Host "[build_win_portable] Using Python for extraction (MAX_PATH safe)..."
-   & $PythonCmd $PackDir\extract_zip.py $Archive $WinDir
-   if ($LASTEXITCODE -ne 0) { throw "extract_zip.py failed with exit code $LASTEXITCODE" }
-}
-
-# Find actual env root (archive may have a top-level directory)
-$PythonExe = Get-ChildItem -Path $WinDir -Depth 2 -Filter "python.exe" |
-  Where-Object { $_.DirectoryName -match "\\Scripts$" -or $_.DirectoryName -match "/Scripts$" } |
-  Select-Object -First 1
-if ($PythonExe) {
-  $ActualEnvRoot = $PythonExe.Directory.Parent.FullName
-  if ($ActualEnvRoot -ne $EnvDir) {
-    Write-Host "[build_win_portable] Moving env content from $ActualEnvRoot -> $EnvDir"
-    # Content is nested; move it up
-    $NestedDir = $ActualEnvRoot
-    $TempDir = Join-Path $Dist "_win_env_temp"
-    Move-Item $NestedDir $TempDir
-    # Remove the wrapper directory
-    $ParentOfNested = Split-Path $NestedDir -Parent
-    if (($ParentOfNested -ne $WinDir) -and (Test-Path $ParentOfNested)) {
-      Remove-Item -Recurse -Force $ParentOfNested
-    }
-    Move-Item $TempDir $EnvDir
-  }
+  # -bso0 / -bse0 / -bsp0: silence stdout/stderr/progress streams.
+  # Without these, 7z emits a per-byte progress bar that PowerShell's pipe
+  # has to buffer — adding minutes to a 80k-file extraction on Windows.
+  & 7z x $Archive -o"$EnvDir" -y -aoa -bso0 -bse0 -bsp0
+  if ($LASTEXITCODE -ne 0) { throw "7z extraction failed with exit code $LASTEXITCODE" }
 } else {
-  # No nested directory; env content is directly under $WinDir
-  # Check if python.exe exists at $WinDir\python.exe
-  $DirectPython = Join-Path $WinDir "python.exe"
-  if (-not (Test-Path $DirectPython)) {
-    # Look one level down
-    $TopDir = Get-ChildItem -Path $WinDir -Directory | Select-Object -First 1
-    if ($TopDir) {
-      Write-Host "[build_win_portable] Moving env content from $($TopDir.FullName) -> $EnvDir"
-      $TempDir = Join-Path $Dist "_win_env_temp"
-      Move-Item $TopDir.FullName $TempDir
-      Move-Item $TempDir $EnvDir
+  Write-Host "[build_win_portable] 7-Zip not in PATH — using Python long-path extractor..." -ForegroundColor Yellow
+  Write-Host "[build_win_portable] Hint: install 7-Zip (https://www.7-zip.org/) for ~10x faster extraction" -ForegroundColor Yellow
+  & $PythonCmd $PackDir\extract_zip.py $Archive $EnvDir
+  if ($LASTEXITCODE -ne 0) { throw "extract_zip.py failed with exit code $LASTEXITCODE" }
+}
+$extractEnd = Get-Date
+$extractTime = ($extractEnd - $extractStart).TotalSeconds
+Write-Host "[build_win_portable] Extraction done in $([math]::Round($extractTime, 1))s"
+
+# If the archive has a top-level wrapper directory (rare for conda-pack
+# output, but possible), python.exe will be nested one level deeper than
+# expected. Use robocopy (MAX_PATH-safe) to flatten it in place.
+$DirectPython = Join-Path $EnvDir "python.exe"
+if (-not (Test-Path $DirectPython)) {
+  $PythonExe = Get-ChildItem -Path $EnvDir -Depth 2 -Filter "python.exe" |
+    Where-Object { $_.DirectoryName -match "\\Scripts$" -or $_.DirectoryName -match "/Scripts$" } |
+    Select-Object -First 1
+  if ($PythonExe) {
+    $NestedEnvRoot = $PythonExe.Directory.Parent.FullName
+    Write-Host "[build_win_portable] Flattening nested env content from $NestedEnvRoot -> $EnvDir"
+    # robocopy /E /MOVE handles >260-char paths and removes the source tree.
+    # /NFL /NDL /NJH /NJS suppresses per-file logging; exit codes <8 are OK.
+    $robocopyArgs = @($NestedEnvRoot, $EnvDir, "/E", "/MOVE", "/NFL", "/NDL", "/NJH", "/NJS", "/NP")
+    & robocopy @robocopyArgs | Out-Null
+    if ($LASTEXITCODE -ge 8) {
+      throw "robocopy flatten failed with exit code $LASTEXITCODE"
     }
-  } else {
-    # python.exe is directly in $WinDir, create env subdir
-    Write-Host "[build_win_portable] Moving env content into env/ subdirectory"
-    $TempDir = Join-Path $Dist "_win_env_temp"
-    Move-Item $WinDir $TempDir
-    New-Item -ItemType Directory -Force -Path $WinDir | Out-Null
-    Move-Item $TempDir $EnvDir
+    # Clean up the now-empty wrapper directory
+    $Wrapper = Split-Path $NestedEnvRoot -Parent
+    if (($Wrapper -ne $EnvDir) -and (Test-Path $Wrapper)) {
+      Remove-Item -Recurse -Force $Wrapper -ErrorAction SilentlyContinue
+    }
+    $global:LASTEXITCODE = 0
   }
 }
 
@@ -176,31 +176,46 @@ if (-not (Test-Path $PythonExePath)) {
 }
 Write-Host "[build_win_portable] python.exe found: $PythonExePath"
 
-# --- Copy cached wheels for runtime conda-unpack fix ---
-$WheelsCache = Join-Path $RepoRoot ".cache\conda_unpack_wheels"
-$PortableWheels = Join-Path $EnvDir ".portable_wheels"
-if (Test-Path $WheelsCache) {
-  Write-Host "[build_win_portable] Copying cached wheels for runtime conda-unpack fix..."
-  Copy-Item -Path $WheelsCache -Destination $PortableWheels -Recurse -Force
-  Write-Host "[build_win_portable] Wheels copied to $PortableWheels"
-} else {
-  Write-Host "[build_win_portable] WARN: No cached wheels found at $WheelsCache" -ForegroundColor Yellow
-}
-
-# NOTE: Do NOT run conda-unpack here. It will run at first launch on the target machine.
-Write-Host "[build_win_portable] Skipping conda-unpack (deferred to first launch on target machine)"
+# NOTE: conda-unpack is NOT needed for the portable build.
+# All launchers use `python.exe` and `python -m` which resolve paths
+# dynamically from the exe location. Python's site.py derives sys.prefix
+# at runtime, so site-packages discovery works without path rewriting.
 
 # --- Pre-compile bytecode ---
 Write-Host "== Pre-compiling Python bytecode for faster startup =="
+# Skip large indirect-dependency packages. Criteria: project source does not
+# directly `import` them, OR compileall has previously failed on their files
+# (Windows MAX_PATH / temp-file races). Python compiles lazily on first
+# import at runtime, so skipping only delays first use of these packages,
+# not core startup.
+#   kubernetes (69MB) - indirect dep, never imported by qwenpaw
+#   sympy       (48MB) - indirect dep (transformers), never imported
+#   modelscope  (37MB) - imported lazily by local_models; had compile errors
+#   twilio      (37MB) - voice channel only; had compile errors
+#   lark_oapi   (41MB) - feishu channel only; had compile errors
+$CompileSkipRegex = "kubernetes|sympy|modelscope|twilio|lark_oapi|transformers|onnxruntime|huggingface_hub|playwright|discord|matrix.nio|telegram|pillow"
 $compileStart = Get-Date
-& $PythonExePath -m compileall -q -j 0 $EnvDir
-if ($LASTEXITCODE -eq 0) {
-  $compileEnd = Get-Date
-  $compileTime = ($compileEnd - $compileStart).TotalSeconds
-  $pycCount = (Get-ChildItem -Path $EnvDir -Recurse -Filter "*.pyc").Count
-  Write-Host "[build_win_portable] Compiled $pycCount .pyc files in $([math]::Round($compileTime, 1))s"
+$compileTimeoutSec = 600  # 10 minutes max for bytecode compilation
+$compileJob = Start-Job -ScriptBlock {
+  param($py, $skipRx, $dir)
+  & $py -m compileall -q -j 0 -x $skipRx $dir
+  return $LASTEXITCODE
+} -ArgumentList $PythonExePath, $CompileSkipRegex, $EnvDir
+$compileResult = $compileJob | Wait-Job -Timeout $compileTimeoutSec
+if ($null -eq $compileResult) {
+  Write-Host "[build_win_portable] WARN: compileall timed out after ${compileTimeoutSec}s, stopping..." -ForegroundColor Yellow
+  $compileJob | Stop-Job
+  $compileExit = -1
 } else {
-  Write-Host "[build_win_portable] WARN: compileall failed (exit $LASTEXITCODE), continuing..." -ForegroundColor Yellow
+  $compileExit = Receive-Job $compileJob
+}
+Remove-Job $compileJob -Force -ErrorAction SilentlyContinue
+$compileEnd = Get-Date
+$compileTime = ($compileEnd - $compileStart).TotalSeconds
+$pycCount = (Get-ChildItem -Path $EnvDir -Recurse -Filter "*.pyc").Count
+Write-Host "[build_win_portable] Compiled $pycCount .pyc files in $([math]::Round($compileTime, 1))s (skipped: $CompileSkipRegex)"
+if ($compileExit -ne 0) {
+  Write-Host "[build_win_portable] WARN: compileall exit $compileExit (some files skipped), continuing..." -ForegroundColor Yellow
 }
 
 # --- Copy icon ---
@@ -210,16 +225,34 @@ if (Test-Path $IconSrc) {
   Write-Host "[build_win_portable] Copied icon.ico"
 }
 
-# --- Create portable launchers ---
+# --- Pre-resolve certifi cacert.pem path (relative to env) ---
+# Hardcoding this into the launchers lets start.bat skip a Python cold-start
+# on every launch (saves ~0.5-1s). Falls back to dynamic lookup at runtime
+# if the file has moved (e.g. certifi version mismatch).
+$CertifiRel = $null
+try {
+  $certOut = & $PythonExePath -c "import certifi, os; print(os.path.relpath(certifi.where(), os.environ['VIRTUAL_ENV'] if 'VIRTUAL_ENV' in os.environ else os.path.dirname(os.path.dirname(os.__file__))))" 2>&1
+  if ($LASTEXITCODE -eq 0 -and $certOut) {
+    # Convert to env-root-relative using the actual EnvDir
+    $certAbs = & $PythonExePath -c "import certifi; print(certifi.where())" 2>&1
+    $certAbs = $certAbs.Trim()
+    $envNorm = $EnvDir.TrimEnd('\', '/') + '\'
+    if ($certAbs.StartsWith($envNorm)) {
+      $CertifiRel = $certAbs.Substring($envNorm.Length)
+    }
+  }
+} catch {}
+if (-not $CertifiRel) {
+  $CertifiRel = "Lib\site-packages\certifi\cacert.pem"
+  Write-Host "[build_win_portable] Using default certifi path: $CertifiRel" -ForegroundColor Yellow
+} else {
+  Write-Host "[build_win_portable] certifi cacert.pem resolved to: $CertifiRel"
+}
 
-# Packages affected by conda-unpack bug (must match build_common.py)
-$CondaUnpackPkgs = "huggingface_hub", "discord.py"
+# --- Create portable launchers ---
 
 # start.bat - main portable launcher
 $StartBat = Join-Path $WinDir "start.bat"
-$PkgReinstallLines = ($CondaUnpackPkgs | ForEach-Object {
-  "    `"%~dp0env\python.exe`" -m pip install --force-reinstall --no-deps --find-links `"%~dp0env\.portable_wheels`" --no-index $_ 2>nul"
-}) -join "`r`n"
 
 @"
 @echo off
@@ -236,64 +269,39 @@ set "QWENPAW_SECRET_DIR=%USB_ROOT%\data\.secret"
 set "QWENPAW_BACKUP_DIR=%USB_ROOT%\data\.backups"
 set "QWENPAW_DESKTOP_APP=1"
 
-REM Create data directories
-if not exist "%USB_ROOT%\data" mkdir "%USB_ROOT%\data"
-if not exist "%USB_ROOT%\data\.secret" mkdir "%USB_ROOT%\data\.secret"
-if not exist "%USB_ROOT%\data\.backups" mkdir "%USB_ROOT%\data\.backups"
-
 REM Isolate packaged Python
 set "PYTHONNOUSERSITE=1"
 set "PATH=%~dp0env;%~dp0env\Scripts;%PATH%"
 
-REM Conda-unpack on first run (fixes paths for new location)
-if not exist "%~dp0env\.conda-unpack-done" (
-  if exist "%~dp0env\Scripts\conda-unpack.exe" (
-    echo [Portable] First run: configuring environment...
-    "%~dp0env\Scripts\conda-unpack.exe"
-    if errorlevel 1 (
-      echo [Portable] WARNING: conda-unpack failed
-    ) else (
-      type nul > "%~dp0env\.conda-unpack-done"
-      REM Fix conda-unpack corruption by reinstalling affected packages
-$PkgReinstallLines
-    )
-  ) else (
-    type nul > "%~dp0env\.conda-unpack-done"
-  )
-)
+REM Ensure data directories exist
+mkdir "%USB_ROOT%\data" 2>nul
+mkdir "%USB_ROOT%\data\.secret" 2>nul
+mkdir "%USB_ROOT%\data\.backups" 2>nul
 
-REM Set SSL certificate paths
-set "CERT_TMP=%TEMP%\qwenpaw_cert_%RANDOM%.txt"
-"%~dp0env\python.exe" -u -c "import ssl; ssl.create_default_context = lambda *a, **kw: ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT); import certifi; print(certifi.where())" > "%CERT_TMP%" 2>nul
-set /p CERT_FILE=<"%CERT_TMP%"
-del "%CERT_TMP%" 2>nul
-if defined CERT_FILE (
-  if exist "%CERT_FILE%" (
-    set "SSL_CERT_FILE=%CERT_FILE%"
-    set "REQUESTS_CA_BUNDLE=%CERT_FILE%"
-    set "CURL_CA_BUNDLE=%CERT_FILE%"
-  )
+REM Set SSL certificate paths (pre-resolved at build time, Python fallback)
+set "CERT_FILE=%~dp0env\$CertifiRel"
+if not exist "%CERT_FILE%" (
+  set "CERT_TMP=%TEMP%\qwenpaw_cert_%RANDOM%.txt"
+  "%~dp0env\python.exe" -u -c "import ssl; ssl.create_default_context = lambda *a, **kw: ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT); import certifi; print(certifi.where())" > "%CERT_TMP%" 2>nul
+  set /p CERT_FILE=<"%CERT_TMP%"
+  del "%CERT_TMP%" 2>nul
+)
+if exist "%CERT_FILE%" (
+  set "SSL_CERT_FILE=%CERT_FILE%"
+  set "REQUESTS_CA_BUNDLE=%CERT_FILE%"
+  set "CURL_CA_BUNDLE=%CERT_FILE%"
 )
 
 REM Log level
 if not defined QWENPAW_LOG_LEVEL set "QWENPAW_LOG_LEVEL=info"
 
-REM Auto-init config if not present
-if not exist "%QWENPAW_WORKING_DIR%\config.json" (
-  "%~dp0env\python.exe" -u -m qwenpaw init --defaults --accept-security
-)
+REM Launch (fix-paths runs in-process via --fix-paths flag)
+"%~dp0env\python.exe" -u -m qwenpaw desktop --fix-paths --log-level %QWENPAW_LOG_LEVEL%
 
-REM Rewrite stale paths from previous device
-"%~dp0env\python.exe" -u -m qwenpaw fix-paths
-
-REM Launch
-"%~dp0env\python.exe" -u -m qwenpaw desktop --log-level %QWENPAW_LOG_LEVEL%
-
-REM Cleanup orphan backend processes on exit
-"%~dp0env\python.exe" -u -m qwenpaw shutdown 2>nul
+REM Cleanup handled by Windows Job Object (KILL_ON_JOB_CLOSE) in desktop_cmd.py
 "@ | Set-Content -Path $StartBat -Encoding ASCII
 
-# start-debug.bat - debug launcher (shows console)
+# start-debug.bat - debug launcher (shows console, optimized)
 $DebugBat = Join-Path $WinDir "start-debug.bat"
 @"
 @echo off
@@ -310,46 +318,30 @@ set "QWENPAW_SECRET_DIR=%USB_ROOT%\data\.secret"
 set "QWENPAW_BACKUP_DIR=%USB_ROOT%\data\.backups"
 set "QWENPAW_DESKTOP_APP=1"
 
-REM Create data directories
-if not exist "%USB_ROOT%\data" mkdir "%USB_ROOT%\data"
-if not exist "%USB_ROOT%\data\.secret" mkdir "%USB_ROOT%\data\.secret"
-if not exist "%USB_ROOT%\data\.backups" mkdir "%USB_ROOT%\data\.backups"
-
 REM Isolate packaged Python
 set "PYTHONNOUSERSITE=1"
 set "PATH=%~dp0env;%~dp0env\Scripts;%PATH%"
 
+REM Ensure data directories exist
+mkdir "%USB_ROOT%\data" 2>nul
+mkdir "%USB_ROOT%\data\.secret" 2>nul
+mkdir "%USB_ROOT%\data\.backups" 2>nul
+
 REM Debug log level by default
 if not defined QWENPAW_LOG_LEVEL set "QWENPAW_LOG_LEVEL=debug"
 
-REM Conda-unpack on first run
-if not exist "%~dp0env\.conda-unpack-done" (
-  if exist "%~dp0env\Scripts\conda-unpack.exe" (
-    echo [Portable] First run: configuring environment...
-    "%~dp0env\Scripts\conda-unpack.exe"
-    if errorlevel 1 (
-      echo [Portable] WARNING: conda-unpack failed
-    ) else (
-      type nul > "%~dp0env\.conda-unpack-done"
-      echo [Portable] Fixing conda-unpack corruption...
-$PkgReinstallLines
-    )
-  ) else (
-    type nul > "%~dp0env\.conda-unpack-done"
-  )
+REM Set SSL certificate paths (pre-resolved at build time, Python fallback)
+set "CERT_FILE=%~dp0env\$CertifiRel"
+if not exist "%CERT_FILE%" (
+  set "CERT_TMP=%TEMP%\qwenpaw_cert_%RANDOM%.txt"
+  "%~dp0env\python.exe" -u -c "import ssl; ssl.create_default_context = lambda *a, **kw: ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT); import certifi; print(certifi.where())" > "%CERT_TMP%" 2>nul
+  set /p CERT_FILE=<"%CERT_TMP%"
+  del "%CERT_TMP%" 2>nul
 )
-
-REM Set SSL certificate paths
-set "CERT_TMP=%TEMP%\qwenpaw_cert_%RANDOM%.txt"
-"%~dp0env\python.exe" -u -c "import ssl; ssl.create_default_context = lambda *a, **kw: ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT); import certifi; print(certifi.where())" > "%CERT_TMP%" 2>nul
-set /p CERT_FILE=<"%CERT_TMP%"
-del "%CERT_TMP%" 2>nul
-if defined CERT_FILE (
-  if exist "%CERT_FILE%" (
-    set "SSL_CERT_FILE=%CERT_FILE%"
-    set "REQUESTS_CA_BUNDLE=%CERT_FILE%"
-    set "CURL_CA_BUNDLE=%CERT_FILE%"
-  )
+if exist "%CERT_FILE%" (
+  set "SSL_CERT_FILE=%CERT_FILE%"
+  set "REQUESTS_CA_BUNDLE=%CERT_FILE%"
+  set "CURL_CA_BUNDLE=%CERT_FILE%"
 )
 
 echo ====================================
@@ -364,24 +356,14 @@ echo Log Level: %QWENPAW_LOG_LEVEL%
 echo SSL_CERT_FILE: %SSL_CERT_FILE%
 echo.
 
-REM Auto-init config if not present
-if not exist "%QWENPAW_WORKING_DIR%\config.json" (
-  echo [Init] Creating config...
-  "%~dp0env\python.exe" -u -m qwenpaw init --defaults --accept-security
-)
-
-REM Rewrite stale paths from previous device
-"%~dp0env\python.exe" -u -m qwenpaw fix-paths
-
 echo [Launch] Starting QwenPaw Desktop with log-level=%QWENPAW_LOG_LEVEL%...
 echo Press Ctrl+C to stop
 echo.
-"%~dp0env\python.exe" -u -m qwenpaw desktop --log-level %QWENPAW_LOG_LEVEL%
+"%~dp0env\python.exe" -u -m qwenpaw desktop --fix-paths --log-level %QWENPAW_LOG_LEVEL%
 echo.
 echo [Exit] QwenPaw Desktop closed
 
-REM Cleanup orphan backend processes
-"%~dp0env\python.exe" -u -m qwenpaw shutdown 2>nul
+REM Cleanup handled by Windows Job Object (KILL_ON_JOB_CLOSE) in desktop_cmd.py
 pause
 "@ | Set-Content -Path $DebugBat -Encoding ASCII
 
@@ -470,10 +452,23 @@ if ($env:CREATE_ZIP -eq "1") {
   Write-Host "[build_win_portable] ZIP created: $ZipPath"
 }
 
-# --- Clean intermediate artifacts (keep existing portable directories) ---
+# --- Clean intermediate artifacts (keep ALL QwenPaw-Portable_* directories) ---
 Write-Host "== Cleaning build artifacts =="
-if (Test-Path $Archive) { Remove-Item $Archive -Force }
-Write-Host "[build_win_portable] Cleaned up intermediate files"
+# Remove everything in dist/ except historical portable packages.
+# This matches build_portable.sh: drops env.zip, wheels, sdists, temp dirs,
+# while preserving every QwenPaw-Portable_<timestamp>/ ever produced.
+if (Test-Path $Dist) {
+  Get-ChildItem -Path $Dist -ErrorAction SilentlyContinue | Where-Object {
+    $_.Name -notmatch '^QwenPaw-Portable_'
+  } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+}
+# Strip .DS_Store droppings (cross-platform copy from macOS can leave these).
+# Intentionally NOT removing __pycache__: those hold the compileall .pyc files
+# we just built for faster startup.
+Get-ChildItem -Path $PortableRoot -Recurse -Force -ErrorAction SilentlyContinue -File |
+  Where-Object { $_.Name -eq ".DS_Store" } |
+  Remove-Item -Force -ErrorAction SilentlyContinue
+Write-Host "[build_win_portable] Cleaned up intermediate files (all QwenPaw-Portable_* dirs kept)"
 
 # --- Summary ---
 Write-Host ""

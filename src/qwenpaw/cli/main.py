@@ -35,11 +35,6 @@ def _record(label: str, elapsed: float) -> None:
 
 # Timed imports below: order and placement are intentional (E402/C0413).
 _t = time.perf_counter()
-from ..config.utils import read_last_api  # noqa: E402
-
-_record("..config.utils", time.perf_counter() - _t)
-
-_t = time.perf_counter()
 from ..__version__ import __version__  # noqa: E402
 
 _record("..__version__", time.perf_counter() - _t)
@@ -162,6 +157,8 @@ class LazyGroup(click.Group):
 def cli(ctx: click.Context, host: str | None, port: int | None) -> None:
     """QwenPaw CLI."""
     # default from last run if not provided
+    from ..config.utils import read_last_api
+
     last = read_last_api()
     if host is None or port is None:
         if last:
