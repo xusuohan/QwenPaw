@@ -47,6 +47,9 @@ $ConsoleDir = Join-Path $RepoRoot "console"
 $ConsoleDest = Join-Path $RepoRoot "src\qwenpaw\console"
 
 Write-Host "[wheel_build] Building console frontend..."
+# vite build with ~15k modules exhausts Node's default ~2GB heap on Windows.
+# Lift to 8GB so the production bundle doesn't OOM.
+$env:NODE_OPTIONS = "--max-old-space-size=8192"
 Push-Location $ConsoleDir
 try {
   npm ci
@@ -81,9 +84,14 @@ Write-Host "[wheel_build] Using Python: $PythonCmd"
 
 & $PythonCmd -m pip install --quiet build
 $DistDir = Join-Path $RepoRoot "dist"
-if (Test-Path $DistDir) {
-  Remove-Item -Path (Join-Path $DistDir "*") -Force -ErrorAction SilentlyContinue
+if (-not (Test-Path $DistDir)) {
+  New-Item -ItemType Directory -Force -Path $DistDir | Out-Null
 }
+# Only remove prior qwenpaw wheel/sdist artifacts. Preserve QwenPaw-Portable_*
+# directories and any other user content so historical portable builds survive.
+Get-ChildItem -Path $DistDir -File -ErrorAction SilentlyContinue | Where-Object {
+  $_.Name -match '^qwenpaw-.*\.(whl|tar\.gz|tgz|zip)$'
+} | Remove-Item -Force -ErrorAction SilentlyContinue
 & $PythonCmd -m build --outdir dist .
 if ($LASTEXITCODE -ne 0) { throw "$PythonCmd -m build failed with exit code $LASTEXITCODE" }
 

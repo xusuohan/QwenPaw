@@ -18,9 +18,14 @@ from pathlib import Path
 from typing import Optional
 
 from qwenpaw.constant import SECRET_DIR, WORKING_DIR
-from qwenpaw.security.secret_store import decrypt, encrypt, is_encrypted
 
 logger = logging.getLogger(__name__)
+
+
+def _secret_store():
+    """Lazily import secret_store to defer cryptography/keyring load."""
+    from qwenpaw.security.secret_store import decrypt, encrypt, is_encrypted
+    return decrypt, encrypt, is_encrypted
 
 
 _BOOTSTRAP_WORKING_DIR = WORKING_DIR
@@ -160,6 +165,7 @@ def load_envs(
     try:
         with open(path, "r", encoding="utf-8") as fh:
             data = json.load(fh)
+        decrypt, encrypt, is_encrypted = _secret_store()
         if isinstance(data, dict):
             raw = {k: str(v) for k, v in data.items()}
             has_plaintext = any(
@@ -183,6 +189,7 @@ def load_envs(
 def _rewrite_encrypted(path: Path, envs: dict[str, str]) -> None:
     """Re-write *envs* with all values encrypted (migration helper)."""
     try:
+        _, encrypt, is_encrypted = _secret_store()
         encrypted = {
             k: encrypt(v) if v and not is_encrypted(v) else v
             for k, v in envs.items()
@@ -209,8 +216,9 @@ def save_envs(
             f"envs.json path exists but is not a regular file: {path}",
         )
     _prepare_secret_parent(path)
+    _, encrypt_fn, is_encrypted_fn = _secret_store()
     encrypted = {
-        k: encrypt(v) if v and not is_encrypted(v) else v
+        k: encrypt_fn(v) if v and not is_encrypted_fn(v) else v
         for k, v in envs.items()
     }
     with open(path, "w", encoding="utf-8") as fh:
