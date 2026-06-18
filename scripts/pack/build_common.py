@@ -250,6 +250,37 @@ def main() -> int:
                     "import certifi; print(f'certifi OK: {certifi.where()}')",
                 ],
             )
+            # Remove large transitive deps never imported by qwenpaw
+            _unused_packages = ["kubernetes", "sympy"]
+            print(f"Removing unused packages: {_unused_packages}")
+            _run(
+                [
+                    conda,
+                    "run",
+                    "-n",
+                    env_name,
+                    "python",
+                    "-m",
+                    "pip",
+                    "uninstall",
+                    *_unused_packages,
+                    "-y",
+                ],
+            )
+            # Clean pip cache to reduce packed size
+            _run(
+                [
+                    conda,
+                    "run",
+                    "-n",
+                    env_name,
+                    "python",
+                    "-m",
+                    "pip",
+                    "cache",
+                    "purge",
+                ],
+            )
             if args.cache_wheels:
                 # Store outside dist/ to avoid being deleted by wheel_build cleanup
                 wheels_cache = REPO_ROOT / ".cache" / "conda_unpack_wheels"
@@ -309,7 +340,7 @@ def main() -> int:
         ]
         if args.format != "infer":
             pack_cmd.extend(["--format", args.format])
-        pack_cmd.extend(["--compress-level", "1"])
+        pack_cmd.extend(["--compress-level", "4"])
         _run(pack_cmd)
         print(f"Packed to {out_path}")
     finally:

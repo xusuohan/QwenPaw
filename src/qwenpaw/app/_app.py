@@ -669,9 +669,21 @@ if os.path.isdir(_CONSOLE_STATIC_DIR):
 
     _assets_dir = _console_path / "assets"
     if _assets_dir.is_dir():
+
+        class _CachedStaticFiles(StaticFiles):
+            """StaticFiles with long-lived cache headers for Vite-hashed assets."""
+
+            async def get_response(self, path, scope):
+                response = await super().get_response(path, scope)
+                if response.status_code == 200:
+                    response.headers["Cache-Control"] = (
+                        "public, max-age=31536000, immutable"
+                    )
+                return response
+
         app.mount(
             "/assets",
-            StaticFiles(directory=str(_assets_dir)),
+            _CachedStaticFiles(directory=str(_assets_dir)),
             name="assets",
         )
 

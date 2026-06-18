@@ -195,8 +195,21 @@ Write-Host "== Pre-compiling Python bytecode for faster startup =="
 #   lark_oapi   (41MB) - feishu channel only; had compile errors
 $CompileSkipRegex = "kubernetes|sympy|modelscope|twilio|lark_oapi|transformers|onnxruntime|huggingface_hub|playwright|discord|matrix.nio|telegram|pillow"
 $compileStart = Get-Date
-& $PythonExePath -m compileall -q -j 0 -x $CompileSkipRegex $EnvDir
-$compileExit = $LASTEXITCODE
+$compileTimeoutSec = 600  # 10 minutes max for bytecode compilation
+$compileJob = Start-Job -ScriptBlock {
+  param($py, $skipRx, $dir)
+  & $py -m compileall -q -j 0 -x $skipRx $dir
+  return $LASTEXITCODE
+} -ArgumentList $PythonExePath, $CompileSkipRegex, $EnvDir
+$compileResult = $compileJob | Wait-Job -Timeout $compileTimeoutSec
+if ($null -eq $compileResult) {
+  Write-Host "[build_win_portable] WARN: compileall timed out after ${compileTimeoutSec}s, stopping..." -ForegroundColor Yellow
+  $compileJob | Stop-Job
+  $compileExit = -1
+} else {
+  $compileExit = Receive-Job $compileJob
+}
+Remove-Job $compileJob -Force -ErrorAction SilentlyContinue
 $compileEnd = Get-Date
 $compileTime = ($compileEnd - $compileStart).TotalSeconds
 $pycCount = (Get-ChildItem -Path $EnvDir -Recurse -Filter "*.pyc").Count
@@ -258,7 +271,6 @@ set "QWENPAW_DESKTOP_APP=1"
 
 REM Isolate packaged Python
 set "PYTHONNOUSERSITE=1"
-set "PYTHONDONTWRITEBYTECODE=1"
 set "PATH=%~dp0env;%~dp0env\Scripts;%PATH%"
 
 REM Ensure data directories exist
@@ -283,14 +295,10 @@ if exist "%CERT_FILE%" (
 REM Log level
 if not defined QWENPAW_LOG_LEVEL set "QWENPAW_LOG_LEVEL=info"
 
-REM Fix stale paths from previous locations
-"%~dp0env\python.exe" -u -m qwenpaw fix-paths 2>nul
+REM Launch (fix-paths runs in-process via --fix-paths flag)
+"%~dp0env\python.exe" -u -m qwenpaw desktop --fix-paths --log-level %QWENPAW_LOG_LEVEL%
 
-REM Launch
-"%~dp0env\python.exe" -u -m qwenpaw desktop --log-level %QWENPAW_LOG_LEVEL%
-
-REM Cleanup orphan backend processes on exit
-"%~dp0env\python.exe" -u -m qwenpaw shutdown 2>nul
+REM Cleanup handled by Windows Job Object (KILL_ON_JOB_CLOSE) in desktop_cmd.py
 "@ | Set-Content -Path $StartBat -Encoding ASCII
 
 # start-debug.bat - debug launcher (shows console, optimized)
@@ -312,7 +320,6 @@ set "QWENPAW_DESKTOP_APP=1"
 
 REM Isolate packaged Python
 set "PYTHONNOUSERSITE=1"
-set "PYTHONDONTWRITEBYTECODE=1"
 set "PATH=%~dp0env;%~dp0env\Scripts;%PATH%"
 
 REM Ensure data directories exist
@@ -349,19 +356,14 @@ echo Log Level: %QWENPAW_LOG_LEVEL%
 echo SSL_CERT_FILE: %SSL_CERT_FILE%
 echo.
 
-REM Fix stale paths from previous locations
-echo [Init] Fixing stale paths...
-"%~dp0env\python.exe" -u -m qwenpaw fix-paths 2>nul
-
 echo [Launch] Starting QwenPaw Desktop with log-level=%QWENPAW_LOG_LEVEL%...
 echo Press Ctrl+C to stop
 echo.
-"%~dp0env\python.exe" -u -m qwenpaw desktop --log-level %QWENPAW_LOG_LEVEL%
+"%~dp0env\python.exe" -u -m qwenpaw desktop --fix-paths --log-level %QWENPAW_LOG_LEVEL%
 echo.
 echo [Exit] QwenPaw Desktop closed
 
-REM Cleanup orphan backend processes
-"%~dp0env\python.exe" -u -m qwenpaw shutdown 2>nul
+REM Cleanup handled by Windows Job Object (KILL_ON_JOB_CLOSE) in desktop_cmd.py
 pause
 "@ | Set-Content -Path $DebugBat -Encoding ASCII
 

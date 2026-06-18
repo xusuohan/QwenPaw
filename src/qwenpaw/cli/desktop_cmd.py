@@ -415,9 +415,16 @@ def _sigterm_handler(signum, _frame):
     show_default=True,
     help="Log level for the app process.",
 )
+@click.option(
+    "--fix-paths",
+    is_flag=True,
+    default=False,
+    help="Rewrite stale absolute paths before starting (for portable builds).",
+)
 def desktop_cmd(
     host: str,
     log_level: str,
+    fix_paths: bool,
 ) -> None:
     """Run QwenPaw app on an auto-selected free port in a webview window.
 
@@ -428,6 +435,15 @@ def desktop_cmd(
     global _backend_proc, _win_job_handle  # noqa: PLW0603
     # Setup logger for desktop command (separate from backend subprocess)
     setup_logger(log_level)
+
+    if fix_paths:
+        from ..config.utils import (
+            rewrite_stale_agent_json_on_disk,
+            rewrite_stale_paths_on_disk,
+        )
+
+        rewrite_stale_paths_on_disk()
+        rewrite_stale_agent_json_on_disk()
 
     port = _find_free_port(host)
     url = f"http://{host}:{port}"
