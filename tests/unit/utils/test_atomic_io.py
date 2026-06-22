@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 
 import pytest
 
 from qwenpaw.utils.atomic_io import (
+    locked_json_update,
     read_json_safe,
     write_bytes_atomic,
     write_json_atomic,
@@ -99,3 +101,45 @@ class TestReadJsonSafe:
         result = read_json_safe(path)
         assert isinstance(result, dict)
         assert result.get("a") == 1
+
+
+class TestLockedJsonUpdate:
+    """locked_json_update serializes RMW under the per-path lock."""
+
+    def test_update_returns_new_value(self, tmp_path):
+        path = tmp_path / "f.json"
+        write_json_atomic(path, {"n": 0})
+        result = locked_json_update(path, lambda cur: {"n": cur["n"] + 1})
+        assert result == {"n": 1}
+        assert json.loads(path.read_text(encoding="utf-8")) == {"n": 1}
+
+    def test_missing_file_passes_default(self, tmp_path):
+        path = tmp_path / "f.json"
+        result = locked_json_update(
+            path,
+            lambda cur: {"n": (cur or {}).get("n", 0) + 1},
+            default={},
+        )
+        assert result == {"n": 1}
+
+    def test_concurrent_increment_no_lost_updates(self, tmp_path):
+        path = tmp_path / "counter.json"
+        write_json_atomic(path, {"n": 0})
+        n_threads, per_thread = 20, 100
+        expected = n_threads * per_thread
+
+        def bump():
+            for _ in range(per_thread):
+                locked_json_update(
+                    path,
+                    lambda cur: {"n": (cur or {}).get("n", 0) + 1},
+                )
+
+        threads = [threading.Thread(target=bump) for _ in range(n_threads)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert json.loads(path.read_text(encoding="utf-8"))["n"] == expected
+        assert not list(tmp_path.glob("*.tmp.*"))

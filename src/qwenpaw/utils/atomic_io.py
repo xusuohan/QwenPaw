@@ -19,7 +19,7 @@ import json
 import os
 import threading
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from json_repair import repair_json
 
@@ -129,3 +129,29 @@ def read_json_safe(
             return json.loads(repair_json(text))
         except Exception:
             return default
+
+
+def locked_json_update(
+    path: str | os.PathLike,
+    fn: Callable[[Any], Any],
+    *,
+    default: Any = None,
+    fsync: bool = True,
+) -> Any:
+    """Read-modify-write *path* under the per-path RLock.
+
+    *fn* receives the current data (or *default* when the file is
+    missing/corrupt) and returns the new data, which is written
+    atomically. The whole RMW is serialized so concurrent updaters never
+    overwrite each other. Uses an RLock so *fn* may re-enter the same
+    path's lock — but callers MUST NOT trigger another
+    ``locked_json_update`` on the *same* path from within *fn* (that would
+    imply nested RMW which is a logic error, not a supported pattern).
+    """
+    resolved = _resolve(path)
+    with _get_lock(resolved):
+        current = read_json_safe(resolved, default=default)
+        updated = fn(current)
+        # Already hold the lock; write without re-acquiring.
+        write_json_atomic(resolved, updated, lock=False, fsync=fsync)
+        return updated
