@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import sys
 import time
 
@@ -156,6 +157,21 @@ class LazyGroup(click.Group):
 @click.pass_context
 def cli(ctx: click.Context, host: str | None, port: int | None) -> None:
     """QwenPaw CLI."""
+    # Warm OS page cache for bytecode/C-ext on slow USB media. Best-effort
+    # daemon thread; toggle via QWENPAW_PERF_IMPORT_PREFETCH (default on).
+    if os.environ.get("QWENPAW_PERF_IMPORT_PREFETCH", "1").lower() not in (
+        "0",
+        "false",
+        "no",
+    ):
+        try:
+            cap_env = os.environ.get("QWENPAW_PERF_PREFETCH_CAP_MB")
+            from ..utils.import_prefetch import start_import_prefetch
+
+            start_import_prefetch(cap_mb=int(cap_env) if cap_env else None)
+        except Exception:
+            logger.debug("import prefetch start skipped", exc_info=True)
+
     # default from last run if not provided
     from ..config.utils import read_last_api
 
