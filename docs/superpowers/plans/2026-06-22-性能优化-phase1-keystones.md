@@ -35,6 +35,8 @@
 
 设计边界：`atomic_io` 只管"把数据安全写到给定路径"，不感知业务语义；`background_tasks` 只管"派发并跟踪协程"，不知道任务内容。两者都不依赖项目其他模块，可被任何场景按需调用。
 
+> **增量导入约定（重要）**：atomic_io 的 5 个函数分 Task 1–5 逐步加入同一文件。**每个 Task 只导入它新增函数用到的名字**——不预先 import 后续 Task 才定义的函数。测试文件同理：每个 Task 的测试类只 import 当前已存在的函数。否则 pytest 在后续函数定义前无法 collect 测试模块，且会触发 pylint `unused-import`。各 Task 的代码块已按此约定给出所需的 import 增量。
+
 ---
 
 ## Task 1: atomic_io — 模块骨架 + write_bytes_atomic
@@ -52,19 +54,11 @@ Create `tests/unit/utils/test_atomic_io.py`:
 """Unit tests for utils.atomic_io."""
 from __future__ import annotations
 
-import json
 import os
-import threading
 
 import pytest
 
-from qwenpaw.utils.atomic_io import (
-    cleanup_orphan_tmps,
-    locked_json_update,
-    read_json_safe,
-    write_bytes_atomic,
-    write_json_atomic,
-)
+from qwenpaw.utils.atomic_io import write_bytes_atomic
 
 
 class TestWriteBytesAtomic:
@@ -130,13 +124,9 @@ relied upon here.
 """
 from __future__ import annotations
 
-import json
 import os
 import threading
 from pathlib import Path
-from typing import Any, Callable
-
-from json_repair import repair_json
 
 # Module-level registry of per-resolved-path RLocks, guarded by a meta-lock.
 _locks_meta = threading.Lock()
