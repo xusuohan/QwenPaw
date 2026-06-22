@@ -65,3 +65,35 @@ class TestSpawn:
         await asyncio.sleep(0.05)  # let it start
         await runner.shutdown(timeout=1)
         assert cancelled.is_set()
+
+
+class TestSpawnAfter:
+    """spawn_after defers task scheduling by a delay."""
+
+    async def test_runs_after_delay(self):
+        runner = BackgroundTaskRunner()
+        loop = asyncio.get_running_loop()
+        start = loop.time()
+        ran_at: list[float] = []
+
+        async def work():
+            ran_at.append(loop.time())
+
+        runner.spawn_after(0.05, work)
+        await asyncio.sleep(0.2)
+        assert ran_at
+        assert ran_at[0] - start >= 0.05
+        await runner.shutdown()
+
+    async def test_cancelled_during_delay_does_not_run(self):
+        runner = BackgroundTaskRunner()
+        ran = asyncio.Event()
+
+        async def work():
+            ran.set()
+
+        task = runner.spawn_after(1.0, work)
+        await asyncio.sleep(0.05)
+        await runner.shutdown(timeout=1)
+        assert not ran.is_set()
+        assert task.done()

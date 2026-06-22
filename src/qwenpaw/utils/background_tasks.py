@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Awaitable
+from typing import Awaitable, Callable
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +47,30 @@ class BackgroundTaskRunner:
             # Note: asyncio.CancelledError is a BaseException (Py3.8+), so it
             # is NOT caught here and cancellation propagates cleanly.
             logger.exception("Background task failed")
+
+    def spawn_after(
+        self,
+        delay: float,
+        coro_factory: Callable[[], Awaitable],
+        *,
+        name: str | None = None,
+    ) -> asyncio.Task:
+        """Schedule a task after *delay* seconds.
+
+        *coro_factory* is a zero-arg callable returning a fresh coroutine,
+        so the coroutine is only created after the delay elapses (avoids
+        holding an un-awaited coroutine object). If shutdown cancels the
+        task during the delay, the factory is never called.
+        """
+
+        async def _delayed() -> None:
+            try:
+                await asyncio.sleep(delay)
+            except asyncio.CancelledError:
+                return
+            await coro_factory()
+
+        return self.spawn(_delayed(), name=name)
 
     async def shutdown(self, timeout: float = 5.0) -> None:
         """Cancel all tracked tasks and wait for them to finish."""
