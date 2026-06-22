@@ -747,7 +747,7 @@ Expected: FAIL — `AttributeError: 'BackgroundTaskRunner' object has no attribu
 Append to `src/qwenpaw/utils/background_tasks.py` (inside the `BackgroundTaskRunner` class, after `_wrap`):
 
 ```python
-    async def spawn_after(
+    def spawn_after(
         self,
         delay: float,
         coro_factory: Callable[[], Awaitable],

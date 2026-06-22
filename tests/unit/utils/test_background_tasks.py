@@ -79,10 +79,11 @@ class TestSpawnAfter:
         async def work():
             ran_at.append(loop.time())
 
-        runner.spawn_after(0.05, work)
-        await asyncio.sleep(0.2)
+        runner.spawn_after(0.1, work)
+        await asyncio.sleep(0.25)
         assert ran_at
-        assert ran_at[0] - start >= 0.05
+        # Tolerate scheduler jitter; the 0.1s delay must have elapsed.
+        assert ran_at[0] - start >= 0.09
         await runner.shutdown()
 
     async def test_cancelled_during_delay_does_not_run(self):
