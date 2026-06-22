@@ -155,3 +155,23 @@ def locked_json_update(
         # Already hold the lock; write without re-acquiring.
         write_json_atomic(resolved, updated, lock=False, fsync=fsync)
         return updated
+
+
+def cleanup_orphan_tmps(
+    directory: str | os.PathLike,
+    pattern: str = "*.tmp.*",
+) -> int:
+    """Remove leftover ``.tmp.<pid>`` files in *directory*.
+
+    A crash between writing the tmp file and ``os.replace`` leaves an
+    orphan; call this at startup to reclaim space and avoid confusion.
+    Returns the number of files removed.
+    """
+    removed = 0
+    for orphan in Path(directory).glob(pattern):
+        try:
+            orphan.unlink()
+            removed += 1
+        except OSError:
+            pass
+    return removed

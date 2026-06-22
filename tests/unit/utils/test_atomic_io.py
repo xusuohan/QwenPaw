@@ -9,6 +9,7 @@ import threading
 import pytest
 
 from qwenpaw.utils.atomic_io import (
+    cleanup_orphan_tmps,
     locked_json_update,
     read_json_safe,
     write_bytes_atomic,
@@ -143,3 +144,19 @@ class TestLockedJsonUpdate:
 
         assert json.loads(path.read_text(encoding="utf-8"))["n"] == expected
         assert not list(tmp_path.glob("*.tmp.*"))
+
+
+class TestCleanupOrphanTmps:
+    """cleanup_orphan_tmps removes stray .tmp.<pid> files."""
+
+    def test_removes_orphans_keeps_real_files(self, tmp_path):
+        (tmp_path / "a.json.tmp.123").write_bytes(b"x")
+        (tmp_path / "a.json").write_bytes(b"{}")
+        removed = cleanup_orphan_tmps(tmp_path)
+        assert removed == 1
+        assert (tmp_path / "a.json").exists()
+        assert not (tmp_path / "a.json.tmp.123").exists()
+
+    def test_no_orphans_returns_zero(self, tmp_path):
+        (tmp_path / "a.json").write_bytes(b"{}")
+        assert cleanup_orphan_tmps(tmp_path) == 0
