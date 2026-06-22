@@ -36,6 +36,7 @@ from ..security.secret_store import (
     encrypt_dict_fields,
     is_encrypted,
 )
+from ..utils.atomic_io import write_json_atomic
 
 logger = logging.getLogger(__name__)
 
@@ -248,8 +249,8 @@ def _save_auth_data(data: dict) -> None:
     """
     _prepare_secret_parent(AUTH_FILE)
     encrypted_data = encrypt_dict_fields(data, AUTH_SECRET_FIELDS)
-    with open(AUTH_FILE, "w", encoding="utf-8") as f:
-        json.dump(encrypted_data, f, indent=2, ensure_ascii=False)
+    write_json_atomic(AUTH_FILE, encrypted_data)
+    # chmod is best-effort (no-op on exFAT); kept for non-exFAT defense.
     _chmod_best_effort(AUTH_FILE, 0o600)
 
 
