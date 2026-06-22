@@ -36,6 +36,7 @@ from ..utils.logging import (
     LOG_FILE_PATH,
 )
 from ..utils.system_info import summarize_python_environment
+from ..utils.atomic_io import cleanup_orphan_tmps
 from .auth import AuthMiddleware, auto_register_from_env
 from .routers import router as api_router, create_agent_scoped_router
 from .routers.agent_scoped import AgentContextMiddleware
@@ -240,6 +241,12 @@ async def lifespan(  # pylint: disable=too-many-statements,too-many-branches
         )
         logger.error(message, exc_info=True)
         raise RuntimeError(f"{message} Original error: {exc}") from exc
+
+    # Reclaim orphaned .tmp.<pid> files left by a crashed atomic write.
+    try:
+        cleanup_orphan_tmps(WORKING_DIR)
+    except Exception:
+        logger.debug("startup orphan tmp cleanup failed", exc_info=True)
 
     auto_register_from_env()
 
@@ -671,14 +678,14 @@ if os.path.isdir(_CONSOLE_STATIC_DIR):
     if _assets_dir.is_dir():
 
         class _CachedStaticFiles(StaticFiles):
-            """StaticFiles with long-lived cache headers for Vite-hashed assets."""
+            """Immutable cache headers for Vite-hashed static assets."""
 
             async def get_response(self, path, scope):
                 response = await super().get_response(path, scope)
                 if response.status_code == 200:
-                    response.headers["Cache-Control"] = (
-                        "public, max-age=31536000, immutable"
-                    )
+                    response.headers[
+                        "Cache-Control"
+                    ] = "public, max-age=31536000, immutable"
                 return response
 
         app.mount(
