@@ -8,6 +8,10 @@ a sibling tmp file, fsync the file, then os.replace. (Directory fsync is
 NOT performed here; the file-level fsync is the load-bearing durability
 measure.) A per-path threading.RLock serializes read-modify-write within
 the process; single-instance deployments do not need cross-process locks.
+The per-path lock registry holds one RLock per resolved path for the life of
+the process (never pruned), so it suits a bounded set of paths (config,
+session, auth, …); callers writing to an unbounded path set should
+re-evaluate.
 
 NOTE: chmod-based protection (e.g. 0o600) is a no-op on exFAT and is NOT
 relied upon here.
@@ -57,6 +61,9 @@ def write_bytes_atomic(
     original is left untouched. When *lock* is True (default) the write is
     serialized with the per-path RLock — callers that already hold the
     lock (e.g. inside :func:`locked_json_update`) pass ``lock=False``.
+    Passing ``lock=False`` without already holding the path's lock breaks
+    RMW serialization under concurrency; the default is safe for all
+    standalone writes.
     """
     resolved = _resolve(path)
     target = Path(resolved)
@@ -97,7 +104,9 @@ def write_json_atomic(
     """Serialize *data* as UTF-8 JSON and write atomically.
 
     Defaults to ``indent=2`` / ``ensure_ascii=False`` to match the rest of
-    the project's on-disk JSON style.
+    the project's on-disk JSON style. ``lock`` and ``fsync`` are forwarded
+    to :func:`write_bytes_atomic`; see its docstring for the ``lock=False``
+    caveat.
     """
     payload = json.dumps(data, indent=indent, ensure_ascii=ensure_ascii)
     write_bytes_atomic(path, payload.encode("utf-8"), lock=lock, fsync=fsync)
@@ -165,7 +174,9 @@ def cleanup_orphan_tmps(
 
     A crash between writing the tmp file and ``os.replace`` leaves an
     orphan; call this at startup to reclaim space and avoid confusion.
-    Returns the number of files removed.
+    Returns the number of files removed. The default *pattern* assumes this
+    module's ``<name>.tmp.<pid>`` naming; pass a custom pattern if the
+    directory also holds unrelated ``*.tmp.*`` files.
     """
     removed = 0
     for orphan in Path(directory).glob(pattern):
