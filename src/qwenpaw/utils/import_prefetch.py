@@ -8,7 +8,10 @@ sequential reads, warming the OS page cache so the import machinery then
 hits warm pages.
 
 Best-effort: swallows all OSError, never blocks the main thread, never
-raises. Toggled by QWENPAW_PERF_IMPORT_PREFETCH (default on); bounded by
+raises. File-list building (which may scan sys.path) runs ON the worker
+thread — never on the caller's thread — so startup is never blocked even
+when site-packages is huge. The fallback sweep is wall-clock bounded.
+Toggled by QWENPAW_PERF_IMPORT_PREFETCH (default on); bounded by
 QWENPAW_PERF_PREFETCH_CAP_MB (default 256). If a measured USB workload
 regresses (prefetch competes for the single USB queue), disable via env.
 """
@@ -17,12 +20,14 @@ from __future__ import annotations
 import logging
 import sys
 import threading
+import time
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
 _DEFAULT_CAP_MB = 256
 _CHUNK = 1024 * 1024  # 1MB sequential reads
+_SWEEP_BUDGET_SEC = 2.0  # wall-clock cap on the fallback directory scan
 
 
 def _read_order_file(order_file: Path) -> list[Path]:
@@ -39,7 +44,11 @@ def _read_order_file(order_file: Path) -> list[Path]:
 
 
 def _sweep_roots() -> list[Path]:
-    """Fallback: sweep sys.path dirs + the qwenpaw package for ext files."""
+    """Fallback: sweep sys.path dirs + the qwenpaw package for ext files.
+
+    Bounded by ``_SWEEP_BUDGET_SEC`` wall-clock so a huge site-packages
+    can't make the (background) scan run away. Runs on the worker thread.
+    """
     roots: list[Path] = []
     for entry in sys.path:
         try:
@@ -52,12 +61,15 @@ def _sweep_roots() -> list[Path]:
     pkg_root = Path(__file__).resolve().parent.parent
     roots.append(pkg_root)
 
+    deadline = time.monotonic() + _SWEEP_BUDGET_SEC
     files: list[Path] = []
     seen: set[str] = set()
     for root in roots:
         try:
             for pattern in ("*.pyc", "*.pyd", "*.so"):
                 for p in root.rglob(pattern):
+                    if time.monotonic() > deadline:
+                        return files
                     key = str(p)
                     if key not in seen:
                         seen.add(key)
@@ -76,9 +88,9 @@ def _build_file_list(import_order_file: Path | None) -> list[Path]:
     return _sweep_roots()
 
 
-def _prefetch_worker(files: list[Path], cap_bytes: int) -> None:
+def _prefetch_worker(order_path: Path | None, cap_bytes: int) -> None:
     read_total = 0
-    for f in files:
+    for f in _build_file_list(order_path):
         if read_total >= cap_bytes:
             break
         try:
@@ -95,30 +107,25 @@ def _prefetch_worker(files: list[Path], cap_bytes: int) -> None:
 def start_import_prefetch(
     cap_mb: int | None = None,
     import_order_file: Path | str | None = None,
-) -> threading.Thread | None:
+) -> threading.Thread:
     """Start a daemon thread that sequentially pre-reads bytecode/C-ext files.
 
-    Returns the thread (or None if disabled / no files). Best-effort: the
-    worker swallows all OSError and never raises.
+    Returns the thread immediately. The file-list scan happens ON the worker
+    thread (never blocking the caller), so this returns at once even when
+    site-packages is large. Best-effort: the worker swallows all OSError and
+    never raises.
     """
     if cap_mb is None:
         cap_mb = _DEFAULT_CAP_MB
     order_path = (
         Path(import_order_file) if import_order_file is not None else None
     )
-    files = _build_file_list(order_path)
-    if not files:
-        return None
     thread = threading.Thread(
         target=_prefetch_worker,
-        args=(files, cap_mb * 1024 * 1024),
+        args=(order_path, cap_mb * 1024 * 1024),
         name="import-prefetch",
         daemon=True,
     )
     thread.start()
-    logger.debug(
-        "import prefetch started: %d files, cap=%dMB",
-        len(files),
-        cap_mb,
-    )
+    logger.debug("import prefetch started: cap=%dMB", cap_mb)
     return thread

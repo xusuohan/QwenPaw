@@ -166,9 +166,19 @@ def cli(ctx: click.Context, host: str | None, port: int | None) -> None:
     ):
         try:
             cap_env = os.environ.get("QWENPAW_PERF_PREFETCH_CAP_MB")
+            cap_mb: int | None = None
+            if cap_env:
+                try:
+                    cap_mb = int(cap_env)
+                except ValueError:
+                    logger.debug(
+                        "invalid QWENPAW_PERF_PREFETCH_CAP_MB=%r;"
+                        " using default",
+                        cap_env,
+                    )
             from ..utils.import_prefetch import start_import_prefetch
 
-            start_import_prefetch(cap_mb=int(cap_env) if cap_env else None)
+            start_import_prefetch(cap_mb=cap_mb)
         except Exception:
             logger.debug("import prefetch start skipped", exc_info=True)
 
