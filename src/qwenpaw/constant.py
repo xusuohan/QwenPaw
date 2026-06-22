@@ -126,17 +126,10 @@ CHATS_FILE = EnvVarLoader.get_str("QWENPAW_CHATS_FILE", "chats.json")
 # Builtin Q&A helper profile.  agent_id keeps "QwenPaw" prefix for existing
 # workspaces and agent.json; do not rename.
 def _discover_agent_languages() -> frozenset[str]:
-    md_root = Path(__file__).resolve().parent / "agents" / "md_files"
-    if md_root.is_dir():
-        langs = {
-            d.name
-            for d in md_root.iterdir()
-            if d.is_dir()
-            and not d.name.startswith(".")
-            and any(d.glob("*.md"))
-        }
-        if langs:
-            return frozenset(langs)
+    # Shipped md_files languages (see agents/md_files/: en/ru/zh have *.md;
+    # local/qa are empty). Hardcoded to avoid an import-time iterdir+glob
+    # scan on every process start — costly on exFAT. Update this set when a
+    # new language dir with *.md is added to the package.
     return frozenset({"en", "zh", "ru"})
 
 
