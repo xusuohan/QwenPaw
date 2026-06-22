@@ -737,28 +737,33 @@ class ChannelManager:
                 pass
             raise
 
-        # 3) Swap + stop old inside lock
+        # 3) Swap inside lock; stop the old instance OUTSIDE the lock so a
+        #    reentrant callback from stop() (get_channel/enqueue/send_event)
+        #    cannot self-deadlock on this non-reentrant asyncio.Lock.
+        old_channel = None
+        is_new = False
         async with self._lock:
-            old_channel = None
             for i, ch in enumerate(self.channels):
                 if ch.channel == new_channel_name:
                     old_channel = ch
                     self.channels[i] = new_channel
                     break
-
             if old_channel is None:
-                logger.info(f"Adding new channel: {new_channel_name}")
+                is_new = True
                 self.channels.append(new_channel)
-            else:
-                logger.info(f"Stopping old channel: {old_channel.channel}")
-                try:
-                    await old_channel.stop()
-                except asyncio.CancelledError:
-                    pass
-                except Exception:
-                    logger.exception(
-                        f"Failed to stop old channel: {old_channel.channel}",
-                    )
+
+        if is_new:
+            logger.info(f"Adding new channel: {new_channel_name}")
+        else:
+            logger.info(f"Stopping old channel: {old_channel.channel}")
+            try:
+                await old_channel.stop()
+            except asyncio.CancelledError:
+                pass
+            except Exception:
+                logger.exception(
+                    f"Failed to stop old channel: {old_channel.channel}",
+                )
 
     async def send_event(
         self,
