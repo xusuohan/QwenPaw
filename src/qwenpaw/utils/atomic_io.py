@@ -15,9 +15,11 @@ relied upon here.
 
 from __future__ import annotations
 
+import json
 import os
 import threading
 from pathlib import Path
+from typing import Any
 
 # Module-level registry of per-resolved-path RLocks, guarded by a meta-lock.
 _locks_meta = threading.Lock()
@@ -79,3 +81,21 @@ def write_bytes_atomic(
             _do_write()
     else:
         _do_write()
+
+
+def write_json_atomic(
+    path: str | os.PathLike,
+    data: Any,
+    *,
+    lock: bool = True,
+    fsync: bool = True,
+    indent: int | None = 2,
+    ensure_ascii: bool = False,
+) -> None:
+    """Serialize *data* as UTF-8 JSON and write atomically.
+
+    Defaults to ``indent=2`` / ``ensure_ascii=False`` to match the rest of
+    the project's on-disk JSON style.
+    """
+    payload = json.dumps(data, indent=indent, ensure_ascii=ensure_ascii)
+    write_bytes_atomic(path, payload.encode("utf-8"), lock=lock, fsync=fsync)
