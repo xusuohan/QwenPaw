@@ -37,6 +37,7 @@ from ..utils.logging import (
 )
 from ..utils.system_info import summarize_python_environment
 from ..utils.atomic_io import cleanup_orphan_tmps
+from ..utils.background_tasks import BackgroundTaskRunner
 from .auth import AuthMiddleware, auto_register_from_env
 from .routers import router as api_router, create_agent_scoped_router
 from .routers.agent_scoped import AgentContextMiddleware
@@ -252,6 +253,10 @@ async def lifespan(  # pylint: disable=too-many-statements,too-many-branches
 
     auto_register_from_env()
 
+    # Fire-and-forget runner for deferrable startup IO (telemetry
+    # upload, ...).
+    _bg_runner = BackgroundTaskRunner()
+
     try:
         from ..utils.telemetry import (
             collect_and_upload_telemetry,
@@ -262,7 +267,26 @@ async def lifespan(  # pylint: disable=too-many-statements,too-many-branches
         if not is_telemetry_opted_out(
             WORKING_DIR,
         ) and not has_telemetry_been_collected(WORKING_DIR):
-            collect_and_upload_telemetry(WORKING_DIR)
+            # Defer the expensive collection (GPU subprocess probes +
+            # network upload) off the startup path. The opt-out / already
+            # collected checks above stay synchronous (cheap marker read).
+            async def _telemetry_task() -> None:
+                try:
+                    await asyncio.to_thread(
+                        collect_and_upload_telemetry,
+                        WORKING_DIR,
+                    )
+                except Exception:
+                    logger.debug(
+                        "Background telemetry upload failed",
+                        exc_info=True,
+                    )
+
+            _bg_runner.spawn_after(
+                2.0,
+                _telemetry_task,
+                name="telemetry",
+            )
     except Exception:
         logger.debug(
             "Telemetry collection skipped due to error",
@@ -479,6 +503,12 @@ async def lifespan(  # pylint: disable=too-many-statements,too-many-branches
             _bg_task.cancel()
             with suppress(asyncio.CancelledError):
                 await _bg_task
+
+        # Drain / cancel deferred background tasks (e.g. telemetry upload).
+        try:
+            await _bg_runner.shutdown()
+        except Exception as e:
+            logger.error(f"Error stopping background task runner: {e}")
 
         # ==================== Execute Shutdown Hooks ====================
         plugin_registry = getattr(app.state, "plugin_registry", None)
