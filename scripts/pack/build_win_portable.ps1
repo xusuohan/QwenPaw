@@ -198,7 +198,7 @@ $compileStart = Get-Date
 $compileTimeoutSec = 600  # 10 minutes max for bytecode compilation
 $compileJob = Start-Job -ScriptBlock {
   param($py, $skipRx, $dir)
-  & $py -m compileall -q -j 0 -x $skipRx $dir
+  & $py -m compileall -q -j 0 --invalidation-mode checked-hash -x $skipRx $dir
   return $LASTEXITCODE
 } -ArgumentList $PythonExePath, $CompileSkipRegex, $EnvDir
 $compileResult = $compileJob | Wait-Job -Timeout $compileTimeoutSec

@@ -73,20 +73,25 @@ spec §3.6 拆为两半：§3.6.1（哈希 pyc，构建期，**确定性**消除
 
 ```bash
 python - <<'PY'
-import compileall, importlib.util, os, tempfile, struct
+import struct, subprocess, sys, tempfile
 from pathlib import Path
 d = Path(tempfile.mkdtemp())
 src = d / "m.py"; src.write_text("x = 1\n")
-compileall.compile_file(str(src), quiet=1, invalidation_mode=importlib.util.PycInvalidationMode.CHECKED_HASH)
+r = subprocess.run([sys.executable, "-m", "compileall", "-q", "-j", "0",
+                    "--invalidation-mode", "checked-hash", str(src)],
+                   capture_output=True)
+assert r.returncode == 0, r.stderr
 pyc = next((d / "__pycache__").glob("*.pyc"))
 with open(pyc, "rb") as f:
-    header = f.read(16)
-flags = struct.unpack("<I", header[4:8])[0]
-assert flags == 2, f"expected CHECKED_HASH(2), got flags={flags}"
-print("OK: checked-hash .pyc produced, flags=2")
+    flags = struct.unpack("<I", f.read(16)[4:8])[0]
+# PEP 552: bit0=1 => hash-based (no mtime). checked-hash sets bits 0+1 => flags=3.
+# (timestamp=0, checked-hash=3, unchecked-hash=1, empirically on CPython 3.10.)
+assert flags & 1 == 1, f"expected hash-based .pyc, got flags={flags}"
+assert flags == 3, f"expected checked-hash (3), got flags={flags}"
+print(f"OK: checked-hash .pyc produced, flags={flags}")
 PY
 ```
-Expected: `OK: checked-hash .pyc produced, flags=2`。
+Expected: `OK: checked-hash .pyc produced, flags=3`。
 
 - [ ] **Step 6: Commit**
 
