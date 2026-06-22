@@ -7,7 +7,11 @@ import os
 
 import pytest
 
-from qwenpaw.utils.atomic_io import write_bytes_atomic, write_json_atomic
+from qwenpaw.utils.atomic_io import (
+    read_json_safe,
+    write_bytes_atomic,
+    write_json_atomic,
+)
 
 
 class TestWriteBytesAtomic:
@@ -70,3 +74,28 @@ class TestWriteJsonAtomic:
         write_json_atomic(path, {"v": 1})
         write_json_atomic(path, {"v": 2})
         assert json.loads(path.read_text(encoding="utf-8")) == {"v": 2}
+
+
+class TestReadJsonSafe:
+    """read_json_safe behavior with json_repair fallback."""
+
+    def test_missing_file_returns_default(self, tmp_path):
+        assert read_json_safe(tmp_path / "nope.json", default={"x": 1}) == {
+            "x": 1,
+        }
+
+    def test_missing_file_default_none(self, tmp_path):
+        assert read_json_safe(tmp_path / "nope.json") is None
+
+    def test_valid_json(self, tmp_path):
+        path = tmp_path / "f.json"
+        path.write_text('{"a": 1}', encoding="utf-8")
+        assert read_json_safe(path) == {"a": 1}
+
+    def test_repairs_truncated_json(self, tmp_path):
+        path = tmp_path / "f.json"
+        path.write_text('{"a": 1', encoding="utf-8")  # truncated
+        # json_repair recovers a usable object rather than raising
+        result = read_json_safe(path)
+        assert isinstance(result, dict)
+        assert result.get("a") == 1

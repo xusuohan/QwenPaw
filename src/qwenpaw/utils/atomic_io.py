@@ -21,6 +21,8 @@ import threading
 from pathlib import Path
 from typing import Any
 
+from json_repair import repair_json
+
 # Module-level registry of per-resolved-path RLocks, guarded by a meta-lock.
 _locks_meta = threading.Lock()
 _locks: dict[str, threading.RLock] = {}
@@ -99,3 +101,31 @@ def write_json_atomic(
     """
     payload = json.dumps(data, indent=indent, ensure_ascii=ensure_ascii)
     write_bytes_atomic(path, payload.encode("utf-8"), lock=lock, fsync=fsync)
+
+
+def read_json_safe(
+    path: str | os.PathLike,
+    *,
+    default: Any = None,
+) -> Any:
+    """Read JSON from *path* with a json_repair fallback.
+
+    Returns *default* when the file is missing or irrecoverably corrupt.
+    A half-written file (crash mid-write) is typically recoverable by
+    json_repair, which avoids data loss on exFAT where non-atomic
+    overwrites are most fragile.
+    """
+    p = Path(path)
+    if not p.exists():
+        return default
+    try:
+        text = p.read_text(encoding="utf-8")
+    except OSError:
+        return default
+    try:
+        return json.loads(text)
+    except (json.JSONDecodeError, ValueError):
+        try:
+            return json.loads(repair_json(text))
+        except Exception:
+            return default
