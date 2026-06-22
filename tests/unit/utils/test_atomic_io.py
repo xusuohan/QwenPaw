@@ -78,6 +78,22 @@ class TestWriteJsonAtomic:
         write_json_atomic(path, {"v": 2})
         assert json.loads(path.read_text(encoding="utf-8")) == {"v": 2}
 
+    def test_sort_keys_orders_keys(self, tmp_path):
+        path = tmp_path / "f.json"
+        write_json_atomic(
+            path,
+            {"b": 1, "a": 2},
+            sort_keys=True,
+        )
+        text = path.read_text(encoding="utf-8")
+        assert text.index('"a"') < text.index('"b"')
+
+    def test_sort_keys_default_false_preserves_insertion_order(self, tmp_path):
+        path = tmp_path / "f.json"
+        write_json_atomic(path, {"b": 1, "a": 2})
+        text = path.read_text(encoding="utf-8")
+        assert text.index('"b"') < text.index('"a"')
+
 
 class TestReadJsonSafe:
     """read_json_safe behavior with json_repair fallback."""

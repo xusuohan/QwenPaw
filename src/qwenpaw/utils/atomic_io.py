@@ -102,6 +102,7 @@ def write_json_atomic(
     fsync: bool = True,
     indent: int | None = 2,
     ensure_ascii: bool = False,
+    sort_keys: bool = False,
 ) -> None:
     """Serialize *data* as UTF-8 JSON and write atomically.
 
@@ -110,7 +111,12 @@ def write_json_atomic(
     to :func:`write_bytes_atomic`; see its docstring for the ``lock=False``
     caveat.
     """
-    payload = json.dumps(data, indent=indent, ensure_ascii=ensure_ascii)
+    payload = json.dumps(
+        data,
+        indent=indent,
+        ensure_ascii=ensure_ascii,
+        sort_keys=sort_keys,
+    )
     write_bytes_atomic(path, payload.encode("utf-8"), lock=lock, fsync=fsync)
 
 
