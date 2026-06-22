@@ -243,8 +243,10 @@ async def lifespan(  # pylint: disable=too-many-statements,too-many-branches
         raise RuntimeError(f"{message} Original error: {exc}") from exc
 
     # Reclaim orphaned .tmp.<pid> files left by a crashed atomic write.
+    # Recursive (**/) so subdirs holding write targets (local_models,
+    # .secret, crons/runner repos) are covered too.
     try:
-        cleanup_orphan_tmps(WORKING_DIR)
+        cleanup_orphan_tmps(WORKING_DIR, pattern="**/*.tmp.*")
     except Exception:
         logger.debug("startup orphan tmp cleanup failed", exc_info=True)
 
