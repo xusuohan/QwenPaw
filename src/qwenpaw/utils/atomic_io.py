@@ -63,7 +63,9 @@ def write_bytes_atomic(
     lock (e.g. inside :func:`locked_json_update`) pass ``lock=False``.
     Passing ``lock=False`` without already holding the path's lock breaks
     RMW serialization under concurrency; the default is safe for all
-    standalone writes.
+    standalone writes. The temp file is created with default umask; no
+    ``mode=`` parameter is supported by design (chmod is a no-op on exFAT
+    — see the module docstring).
     """
     resolved = _resolve(path)
     target = Path(resolved)
