@@ -105,3 +105,25 @@ class TestChatsCacheLoadSave:
         repo2 = JsonChatRepository(path)
         loaded2 = await repo2.load()
         assert [c.id for c in loaded2.chats] == ["c1"]
+
+    async def test_save_failure_leaves_cache_consistent(
+        self,
+        tmp_path,
+        monkeypatch,
+    ):
+        path = tmp_path / "chats.json"
+        repo = JsonChatRepository(path)
+        await repo.save(ChatsFile(chats=[_spec("c1")]))  # persisted + cached
+
+        def boom(*args, **kwargs):
+            raise OSError("disk full")
+
+        monkeypatch.setattr(
+            "qwenpaw.app.runner.repo.json_repo.write_json_atomic",
+            boom,
+        )
+        with pytest.raises(OSError):
+            await repo.save(ChatsFile(chats=[_spec("c2")]))
+        # Cache reflects the last SUCCESSFUL write (c1), not the failed one.
+        loaded = await repo.load()
+        assert [c.id for c in loaded.chats] == ["c1"]

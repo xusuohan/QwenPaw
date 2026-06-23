@@ -53,8 +53,10 @@ class JsonChatRepository(BaseChatRepository):
             path = Path(path)
         self._path = path.expanduser()
         # §4.3 in-process read cache + write-through. _cache holds the last
-        # loaded/saved ChatsFile; _cache_lock self-protects it. Disabled via
-        # QWENPAW_PERF_CHATS_CACHE -> load/save fall back to direct disk.
+        # successfully-persisted ChatsFile; _cache_lock guards it as
+        # defense-in-depth (ChatManager already serializes CRUD per-workspace
+        # via its own lock; this protects against direct repo use). Disabled
+        # via QWENPAW_PERF_CHATS_CACHE -> load/save fall back to direct disk.
         self._cache: ChatsFile | None = None
         self._cache_lock = asyncio.Lock()
 
@@ -80,6 +82,8 @@ class JsonChatRepository(BaseChatRepository):
             return self._load_from_disk_sync()
         async with self._cache_lock:
             if self._cache is None:
+                # Cache miss: read disk under the lock (once per repo
+                # lifetime; blocks the event loop briefly — acceptable).
                 self._cache = self._load_from_disk_sync()
             return self._cache.model_copy(deep=True)
 
@@ -89,14 +93,22 @@ class JsonChatRepository(BaseChatRepository):
         Args:
             chats_file: ChatsFile to persist
         """
+        if not _chats_cache_enabled():
+            write_json_atomic(
+                self._path,
+                chats_file.model_dump(mode="json"),
+                sort_keys=True,
+            )
+            return
         snapshot = chats_file.model_copy(deep=True)
         payload = snapshot.model_dump(mode="json")
-        if not _chats_cache_enabled():
-            write_json_atomic(self._path, payload, sort_keys=True)
-            return
+        # Write-through: persist first, update the cache only on success so
+        # the cache always reflects the last successfully-persisted state. A
+        # failed write raises before the cache is touched, leaving cache and
+        # disk consistent.
+        write_json_atomic(self._path, payload, sort_keys=True)
         async with self._cache_lock:
             self._cache = snapshot
-        write_json_atomic(self._path, payload, sort_keys=True)
 
 
 def migrate_legacy_weixin_chats_file(chats_path: Path | str) -> None:
