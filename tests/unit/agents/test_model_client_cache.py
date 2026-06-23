@@ -45,7 +45,10 @@ class TestCacheFlag:
         monkeypatch.delenv("QWENPAW_PERF_MODEL_CLIENT_CACHE", raising=False)
         assert _model_client_cache_enabled() is True
 
-    @pytest.mark.parametrize("val", ["0", "false", "no", "off", "FALSE"])
+    @pytest.mark.parametrize(
+        "val",
+        ["0", "false", "no", "off", "FALSE", " off ", "\nfalse\n"],
+    )
     def test_disabled_values(self, monkeypatch, val):
         monkeypatch.setenv("QWENPAW_PERF_MODEL_CLIENT_CACHE", val)
         assert _model_client_cache_enabled() is False

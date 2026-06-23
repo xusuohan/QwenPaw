@@ -77,7 +77,10 @@ def _model_client_fingerprint(provider, provider_id, model_id) -> tuple:
 
     ``base_url`` also pins ``default_headers`` (they are a pure function of
     base_url in ``get_chat_model_instance``); ``generate_kwargs`` is included
-    so per-model parameter edits are seen as a miss.
+    so per-model parameter edits are seen as a miss. ``generate_kwargs`` values
+    must be JSON-serializable — a non-serializable value raises rather than
+    silently collapsing into a colliding key (preserves the stale-impossible
+    invariant).
     """
     return (
         provider_id,
@@ -87,7 +90,6 @@ def _model_client_fingerprint(provider, provider_id, model_id) -> tuple:
         json.dumps(
             provider.get_effective_generate_kwargs(model_id),
             sort_keys=True,
-            default=str,
         ),
     )
 
