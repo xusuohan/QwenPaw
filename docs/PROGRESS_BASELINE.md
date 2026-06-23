@@ -2,14 +2,14 @@
 
 > **用途**：本文是 QwenPaw 性能优化工作的**唯一权威基准**。任何新会话接手前，先读完本文，再按需读对应 spec / plan。本文锁定：已完成成果、设计决策、硬约束、剩余任务、流程约定与已知坑。
 >
-> **最后更新**：2026-06-23（Phase 5 完成后）。
-> **当前状态**：分支 `feature/usb-portable`，HEAD = `0d0a5c7e`。5 个 Phase 已实现，部分 spec 章节仍待做。
+> **最后更新**：2026-06-23（Phase 4b / §4.1 模型客户端缓存完成后）。
+> **当前状态**：分支 `feature/usb-portable`，HEAD = `e845d2f8`。Phase 1–5 + Phase 4b 已实现，部分 spec 章节仍待做。
 
 ---
 
 ## 0. 一句话现状
 
-三大核心场景（启动 IO / 运行时延迟 / 资源竞争）+ import 专项，**每个都已有实质进展**（Phase 1–5），但都只完成了**首个子集**；剩余是各场景的深化项（见 §6）。下一个最高价值项是 **§4.1 模型客户端缓存**（运行时 TTFT 的 flagship），但**风险最高**（失效设计需谨慎，建议新会话单独深挖）。
+三大核心场景（启动 IO / 运行时延迟 / 资源竞争）+ import 专项，**每个都已有实质进展**（Phase 1–5 + Phase 4b），但都只完成了**首个子集**；剩余是各场景的深化项（见 §6）。**§4.1 模型客户端缓存已完成**（Phase 4b：工厂级 config 指纹缓存，复用热 httpx 池降 TTFT；stale 由指纹结构性免疫、免失效钩子；C4 满足仅缓存 client）。下一个最高价值项是 **§4.3 chats.json 内存缓存**（中等风险、可照搬 token_usage 模式）。
 
 ---
 
@@ -48,7 +48,7 @@
 **spec 各章节归属**（防止重复/遗漏）：
 - §2.1/2.2 基石 → Phase 1 ✅
 - §3.1 遥测后台 + §3.3 语言硬编码 → Phase 3 ✅；§3.2/§3.4/§3.5/§3.6 → 见 §6 待办
-- §4.2 session 异步 + §4.4 auth 缓存 → Phase 4 ✅；§4.1/§4.3/§4.5 → 见 §6
+- §4.2 session 异步 + §4.4 auth 缓存 → Phase 4 ✅；§4.1 模型客户端缓存 → Phase 4b ✅；§4.3/§4.5 → 见 §6
 - §5.1 八处原子写 + §5.2 ChannelManager 死锁 → Phase 2 ✅；§5.3 日志 + §5.4 secret_store → 见 §6
 
 ---
@@ -114,14 +114,19 @@ start_import_prefetch(cap_mb=None, import_order_file=None) -> threading.Thread
 - `utils/import_prefetch.py` 顺序预读 + `cli()` 开关接入（`f72aa31e`）。
 - **I1 修复**（`0d0a5c7e`）：扫描移到 worker 线程 + 2s 墙钟上限 + cap 解析容错（详见 §8 坑-4）。
 
+### Phase 4b — §4.1 模型客户端缓存（`53b9b89c` → `e845d2f8`）
+- `agents/model_factory.py` 加进程内缓存：`_model_client_cache_enabled`（flag `QWENPAW_PERF_MODEL_CLIENT_CACHE`，默认开，`0/false/no/off` 关）+ `_model_client_fingerprint`（`(provider_id, model_id, base_url, api_key, generate_kwargs)`，无 `default=str` → 非序列化值 fail-loud 保 stale 不变量）+ `_get_cached_inner_model`（持 `threading.Lock` 构建、FIFO cap 64 驱逐）+ `clear_model_client_cache` / `model_client_cache_stats`。
+- `create_model_and_formatter` 两分支（agent-specific + global-fallback）走 `_get_cached_inner_model`；fallback 内联 `ProviderManager.get_active_chat_model` 校验（错误消息逐字一致，移除死代码长消息）。wrapper（`TokenRecordingModelWrapper`+`RetryChatModel`）+ formatter 仍每请求新建（**C4 满足：仅缓存 client**）。
+- agentscope 在 `__init__` 建 httpx 客户端、`__call__` 复用 → 缓存内层 `OpenAIChatModelCompat` 实例 = 复用热连接池 = TTFT 收益。指纹含全部构建决定输入（4 类 provider 均核实）→ **stale 结构性不可能、免失效钩子**；跨 reload 自愈（值 key 非身份）。
+- 测试：`tests/unit/agents/test_model_client_cache.py`（27：flag/指纹/store 含 8 线程并发/cap 驱逐/工厂集成含两 fallback 错误路径）。两阶段评审 + 最终评审（opus）均通过。
+
 ---
 
 ## 6. 剩余任务（按 spec 章节，含理由 + 风险 + 建议顺序）
 
 | spec 节 | 内容 | 风险/理由 | 建议优先级 |
 |---|---|---|---|
-| **§4.1** | 模型/httpx 客户端 per-agent_id 缓存（flagship TTFT）| **最高风险**：失效设计依赖 provider 生命周期（配置变更是重建还是原地改 provider？）——答错=stale client=用错模型/api_key。需先读 `model_factory.create_model_and_formatter` / `openai_provider.get_chat_model_instance` / `OpenAIChatModelCompat` / `provider_manager` / `agent_config_watcher` / `runner.query_handler:570`。备选更稳设计：按 config 指纹（base_url+api_key+model+headers）缓存，免失效钩子。| 次高（收益大但需新会话深挖）|
-| §4.3 | chats.json 内存缓存 + 后台 flush | 中：写回缓存有丢数据风险，需 dirty 跟踪 + flush 生命周期；可照搬 `token_usage` 模式；JsonChatRepository 已在 Phase 2 原子化 | 中 |
+| **§4.3** | chats.json 内存缓存 + 后台 flush（下一最高价值项）| 中：写回缓存有丢数据风险，需 dirty 跟踪 + flush 生命周期；可照搬 `token_usage` 模式；JsonChatRepository 已在 Phase 2 原子化 | 中（建议下一会话）|
 | §4.5 | tool result 写异步 + token 计数增量缓存 | 低（次要收尾项）| 低 |
 | §3.2 | 迁移戳幂等（`.migration_stamp`）| **高**：novel，"跳过是否安全"需逐迁移函数分析；漏跳=数据问题。需读 `migration.py` 四函数（`migrate_legacy_workspace_to_default_agent:56` / `migrate_legacy_skills_to_skill_pool:297` / `ensure_default_agent_exists:644` / `ensure_qa_agent_exists:789`）| 中（单独计划）|
 | §3.4 | restore stat 精简 | 低：需读 `safe_swap.cleanup_startup_restore_artifacts`，保持同步语义 | 低 |
@@ -131,7 +136,7 @@ start_import_prefetch(cap_mb=None, import_order_file=None) -> threading.Thread
 | §5.4 | secret_store master key 首启原子化 | 低：`O_CREAT\|O_EXCL` + `write_bytes_atomic` | 低 |
 | §3.6.2 实测 | import 预读真机测量 | **必须用户在 USB/exFAT 真机**跑 `-X importtime` 前后对比；若反噬设 `QWENPAW_PERF_IMPORT_PREFETCH=0` | 用户侧验证 |
 
-**建议下一会话**：先做 **§4.1**（flagship，但务必先做 provider 生命周期分析；考虑指纹缓存免失效）或 **§4.3**（中等、可照搬现成模式）。每个出新计划（`docs/superpowers/plans/`）+ subagent 驱动执行。
+**建议下一会话**：先做 **§4.3**（chats.json 内存缓存，中等、可照搬 token_usage 模式）或 **§3.2**（迁移戳幂等，需逐迁移函数分析）。每个出新计划（`docs/superpowers/plans/`）+ subagent 驱动执行。
 
 ---
 
@@ -170,9 +175,9 @@ start_import_prefetch(cap_mb=None, import_order_file=None) -> threading.Thread
 
 **基石**：`src/qwenpaw/utils/atomic_io.py`、`background_tasks.py`、`import_prefetch.py`
 **已迁移的写站点**（Phase 2/3/4）：`config/utils.py`、`config/config.py`、`app/auth.py`、`app/channels/dingtalk/{channel,ai_card}.py`、`local_models/manager.py`、`app/crons/repo/json_repo.py`、`app/runner/repo/json_repo.py`、`app/runner/session.py`、`utils/telemetry.py`、`constant.py`
-**结构性改动**：`app/_app.py`（lifespan：runner 接入 + 遥测后台 + 孤儿清理）、`app/channels/manager.py`（replace_channel 死锁修复）、`cli/main.py`（prefetch 接入）
+**结构性改动**：`app/_app.py`（lifespan：runner 接入 + 遥测后台 + 孤儿清理）、`app/channels/manager.py`（replace_channel 死锁修复）、`cli/main.py`（prefetch 接入）、`agents/model_factory.py`（§4.1 模型客户端指纹缓存 + 接入工厂两分支）
 **构建脚本**：`scripts/pack/build_{linux,macos,win,win_portable}.{sh,ps1}`（均 `--invalidation-mode checked-hash`）
-**测试**：`tests/unit/utils/{test_atomic_io,test_background_tasks,test_import_prefetch,test_telemetry_marker}.py`、`tests/unit/app/{test_runner_session,test_auth_cache,test_json_repo}.py`、`tests/unit/channels/test_channel_manager.py`
+**测试**：`tests/unit/utils/{test_atomic_io,test_background_tasks,test_import_prefetch,test_telemetry_marker}.py`、`tests/unit/app/{test_runner_session,test_auth_cache,test_json_repo}.py`、`tests/unit/channels/test_channel_manager.py`、`tests/unit/agents/test_model_client_cache.py`
 
 **规格/计划**：`docs/superpowers/specs/2026-06-22-性能优化-design.md`（设计 + 瓶颈基线）、`docs/superpowers/plans/2026-06-22-性能优化-phase{1..5}-*.md`（各 Phase 任务）
 
