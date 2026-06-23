@@ -83,7 +83,9 @@ class JsonChatRepository(BaseChatRepository):
         async with self._cache_lock:
             if self._cache is None:
                 # Cache miss: read disk off the event loop (once per repo
-                # lifetime); subsequent loads hit the cache (0 IO).
+                # lifetime). Concurrent callers serialize on this cold read
+                # by design (no thundering herd of N cold reads); subsequent
+                # loads hit the cache (0 IO).
                 self._cache = await asyncio.to_thread(
                     self._load_from_disk_sync,
                 )
@@ -94,6 +96,12 @@ class JsonChatRepository(BaseChatRepository):
 
         Args:
             chats_file: ChatsFile to persist
+
+        Note: the disk write is offloaded to a thread, so a caller bypassing
+        ChatManager's per-workspace lock could observe a one-write-behind
+        stale cache during the write. Under normal use (ChatManager
+        serializes CRUD) this cannot happen; the cache always reflects the
+        last successfully-persisted state once save() returns.
         """
         if not _chats_cache_enabled():
             write_json_atomic(

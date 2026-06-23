@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
 
 import pytest
 
@@ -56,9 +55,9 @@ def _write_chats(path, chat_ids):
 
 
 class TestChatsCacheLoadSave:
-    def setup_method(self):
-        # Ensure the cache flag is on (default) for these tests.
-        os.environ.pop("QWENPAW_PERF_CHATS_CACHE", None)
+    @pytest.fixture(autouse=True)
+    def _cache_flag_on(self, monkeypatch):
+        monkeypatch.delenv("QWENPAW_PERF_CHATS_CACHE", raising=False)
 
     async def test_load_caches_after_first_read(self, tmp_path):
         path = tmp_path / "chats.json"
@@ -131,8 +130,9 @@ class TestChatsCacheLoadSave:
 
 
 class TestChatsCacheAsyncAndIntegration:
-    def setup_method(self):
-        os.environ.pop("QWENPAW_PERF_CHATS_CACHE", None)
+    @pytest.fixture(autouse=True)
+    def _cache_flag_on(self, monkeypatch):
+        monkeypatch.delenv("QWENPAW_PERF_CHATS_CACHE", raising=False)
 
     async def test_load_miss_offloads_to_thread(self, tmp_path, monkeypatch):
         path = tmp_path / "chats.json"
@@ -204,6 +204,12 @@ class TestChatsCacheAsyncAndIntegration:
         )
         final = await repo.load()
         assert isinstance(final, ChatsFile)
-        assert len(final.chats) == 1  # last writer wins; no corruption
+        writer_ids = {f"c{i}" for i in range(10)}
+        # The surviving chat is a real writer's state (no garbage), exactly
+        # one (last writer wins under serialized cache updates), and the
+        # cache matches what landed on disk (no torn write).
+        assert len(final.chats) == 1
+        assert final.chats[0].id in writer_ids
         disk = json.loads(path.read_text(encoding="utf-8"))
-        assert disk["version"] == 1  # atomic writes kept disk valid
+        assert disk["version"] == 1
+        assert disk["chats"][0]["id"] == final.chats[0].id
