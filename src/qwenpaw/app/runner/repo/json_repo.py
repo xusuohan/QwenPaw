@@ -2,6 +2,7 @@
 """JSON-based chat repository."""
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -51,11 +52,23 @@ class JsonChatRepository(BaseChatRepository):
         if isinstance(path, str):
             path = Path(path)
         self._path = path.expanduser()
+        # §4.3 in-process read cache + write-through. _cache holds the last
+        # loaded/saved ChatsFile; _cache_lock self-protects it. Disabled via
+        # QWENPAW_PERF_CHATS_CACHE -> load/save fall back to direct disk.
+        self._cache: ChatsFile | None = None
+        self._cache_lock = asyncio.Lock()
 
     @property
     def path(self) -> Path:
         """Get the repository file path."""
         return self._path
+
+    def _load_from_disk_sync(self) -> ChatsFile:
+        """Read chats.json from disk synchronously (the original load body)."""
+        if not self._path.exists():
+            return ChatsFile(version=1, chats=[])
+        data = json.loads(self._path.read_text(encoding="utf-8"))
+        return ChatsFile.model_validate(data)
 
     async def load(self) -> ChatsFile:
         """Load chat specs from JSON file.
@@ -63,11 +76,12 @@ class JsonChatRepository(BaseChatRepository):
         Returns:
             ChatsFile with all chat specs
         """
-        if not self._path.exists():
-            return ChatsFile(version=1, chats=[])
-
-        data = json.loads(self._path.read_text(encoding="utf-8"))
-        return ChatsFile.model_validate(data)
+        if not _chats_cache_enabled():
+            return self._load_from_disk_sync()
+        async with self._cache_lock:
+            if self._cache is None:
+                self._cache = self._load_from_disk_sync()
+            return self._cache.model_copy(deep=True)
 
     async def save(self, chats_file: ChatsFile) -> None:
         """Save chat specs to JSON file atomically.
@@ -75,7 +89,13 @@ class JsonChatRepository(BaseChatRepository):
         Args:
             chats_file: ChatsFile to persist
         """
-        payload = chats_file.model_dump(mode="json")
+        snapshot = chats_file.model_copy(deep=True)
+        payload = snapshot.model_dump(mode="json")
+        if not _chats_cache_enabled():
+            write_json_atomic(self._path, payload, sort_keys=True)
+            return
+        async with self._cache_lock:
+            self._cache = snapshot
         write_json_atomic(self._path, payload, sort_keys=True)
 
 
