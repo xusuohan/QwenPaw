@@ -15,6 +15,7 @@ from qwenpaw.agents.model_factory import (
     clear_model_client_cache,
     model_client_cache_stats,
 )
+import qwenpaw.agents.model_factory as mf
 
 
 class _FakeModel:
@@ -183,3 +184,10 @@ class TestCachedInnerModel:
         assert len(results) == 8
         assert all(r is results[0] for r in results)  # all share one client
         assert prov.build_calls == 1  # no duplicate build
+
+    def test_cap_evicts_oldest(self, monkeypatch):
+        monkeypatch.setattr(mf, "_MODEL_CLIENT_CACHE_CAP", 3)
+        prov = _FakeProvider()
+        for i in range(5):
+            _get_cached_inner_model(prov, "p1", f"m{i}")
+        assert model_client_cache_stats()["size"] <= 3

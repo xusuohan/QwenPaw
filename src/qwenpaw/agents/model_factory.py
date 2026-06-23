@@ -99,6 +99,7 @@ _MODEL_CLIENT_CACHE: dict = {}
 _MODEL_CLIENT_CACHE_LOCK = threading.Lock()
 _MODEL_CLIENT_CACHE_HITS = 0
 _MODEL_CLIENT_CACHE_MISSES = 0
+_MODEL_CLIENT_CACHE_CAP = 64
 
 
 def _get_cached_inner_model(provider, provider_id, model_id):
@@ -124,6 +125,9 @@ def _get_cached_inner_model(provider, provider_id, model_id):
         built = provider.get_chat_model_instance(model_id)
         _MODEL_CLIENT_CACHE[fp] = built
         _MODEL_CLIENT_CACHE_MISSES += 1
+        # Bound memory: evict oldest entries (dict preserves insert order).
+        while len(_MODEL_CLIENT_CACHE) > _MODEL_CLIENT_CACHE_CAP:
+            _MODEL_CLIENT_CACHE.pop(next(iter(_MODEL_CLIENT_CACHE)))
         return built
 
 
