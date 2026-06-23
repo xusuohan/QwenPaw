@@ -82,9 +82,11 @@ class JsonChatRepository(BaseChatRepository):
             return self._load_from_disk_sync()
         async with self._cache_lock:
             if self._cache is None:
-                # Cache miss: read disk under the lock (once per repo
-                # lifetime; blocks the event loop briefly — acceptable).
-                self._cache = self._load_from_disk_sync()
+                # Cache miss: read disk off the event loop (once per repo
+                # lifetime); subsequent loads hit the cache (0 IO).
+                self._cache = await asyncio.to_thread(
+                    self._load_from_disk_sync,
+                )
             return self._cache.model_copy(deep=True)
 
     async def save(self, chats_file: ChatsFile) -> None:
@@ -106,7 +108,12 @@ class JsonChatRepository(BaseChatRepository):
         # the cache always reflects the last successfully-persisted state. A
         # failed write raises before the cache is touched, leaving cache and
         # disk consistent.
-        write_json_atomic(self._path, payload, sort_keys=True)
+        await asyncio.to_thread(
+            write_json_atomic,
+            self._path,
+            payload,
+            sort_keys=True,
+        )
         async with self._cache_lock:
             self._cache = snapshot
 

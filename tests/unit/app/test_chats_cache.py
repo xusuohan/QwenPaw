@@ -2,6 +2,7 @@
 """Tests for JsonChatRepository chats cache (§4.3)."""
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 
@@ -127,3 +128,82 @@ class TestChatsCacheLoadSave:
         # Cache reflects the last SUCCESSFUL write (c1), not the failed one.
         loaded = await repo.load()
         assert [c.id for c in loaded.chats] == ["c1"]
+
+
+class TestChatsCacheAsyncAndIntegration:
+    def setup_method(self):
+        os.environ.pop("QWENPAW_PERF_CHATS_CACHE", None)
+
+    async def test_load_miss_offloads_to_thread(self, tmp_path, monkeypatch):
+        path = tmp_path / "chats.json"
+        _write_chats(path, ["c1"])
+        repo = JsonChatRepository(path)  # cache empty -> miss
+        names = []
+        real = asyncio.to_thread
+
+        async def spy(func, *args, **kwargs):
+            names.append(getattr(func, "__name__", repr(func)))
+            return await real(func, *args, **kwargs)
+
+        monkeypatch.setattr(asyncio, "to_thread", spy)
+        await repo.load()
+        assert "_load_from_disk_sync" in names
+
+    async def test_save_offloads_write_to_thread(self, tmp_path, monkeypatch):
+        path = tmp_path / "chats.json"
+        repo = JsonChatRepository(path)
+        names = []
+        real = asyncio.to_thread
+
+        async def spy(func, *args, **kwargs):
+            names.append(getattr(func, "__name__", repr(func)))
+            return await real(func, *args, **kwargs)
+
+        monkeypatch.setattr(asyncio, "to_thread", spy)
+        await repo.save(ChatsFile(chats=[_spec("c1")]))
+        assert "write_json_atomic" in names
+
+    async def test_roundtrip_durability_after_restart(self, tmp_path):
+        path = tmp_path / "chats.json"
+        repo = JsonChatRepository(path)
+        await repo.save(ChatsFile(chats=[_spec("c1")]))
+        # New repo instance simulates a restart (cache empty).
+        repo2 = JsonChatRepository(path)
+        loaded = await repo2.load()
+        assert [c.id for c in loaded.chats] == ["c1"]
+
+    async def test_base_crud_works_with_cache(self, tmp_path):
+        path = tmp_path / "chats.json"
+        repo = JsonChatRepository(path)
+        await repo.upsert_chat(_spec("c1"))
+        assert (await repo.get_chat("c1")).id == "c1"
+        await repo.upsert_chat(_spec("c1", name="renamed"))
+        assert (await repo.get_chat("c1")).name == "renamed"
+        await repo.upsert_chat(_spec("c2"))
+        assert {c.id for c in await repo.filter_chats(user_id="u")} == {
+            "c1",
+            "c2",
+        }
+        assert await repo.delete_chats(["c1"]) is True
+        assert await repo.get_chat("c1") is None
+
+    async def test_concurrent_load_save_safe(self, tmp_path):
+        path = tmp_path / "chats.json"
+        repo = JsonChatRepository(path)
+
+        async def writer(i):
+            await repo.save(ChatsFile(chats=[_spec(f"c{i}")]))
+
+        async def reader():
+            await repo.load()
+
+        # No raise under concurrent access; cache lock serializes updates.
+        await asyncio.gather(
+            *[writer(i) for i in range(10)],
+            *[reader() for _ in range(10)],
+        )
+        final = await repo.load()
+        assert isinstance(final, ChatsFile)
+        assert len(final.chats) == 1  # last writer wins; no corruption
+        disk = json.loads(path.read_text(encoding="utf-8"))
+        assert disk["version"] == 1  # atomic writes kept disk valid
