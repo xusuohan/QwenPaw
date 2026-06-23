@@ -3,11 +3,17 @@
 # pylint: disable=protected-access,unused-argument
 from __future__ import annotations
 
+import json
+import threading
+
 import pytest
 
 from qwenpaw.agents.model_factory import (
+    _get_cached_inner_model,
     _model_client_cache_enabled,
     _model_client_fingerprint,
+    clear_model_client_cache,
+    model_client_cache_stats,
 )
 
 
@@ -85,3 +91,95 @@ class TestFingerprint:
         assert _model_client_fingerprint(p, "p1", "m1") != (
             _model_client_fingerprint(p, "p1", "m2")
         )
+
+
+class TestCachedInnerModel:
+    def setup_method(self):
+        clear_model_client_cache()
+
+    def teardown_method(self):
+        clear_model_client_cache()
+
+    def test_cache_hit_returns_same_instance(self):
+        prov = _FakeProvider()
+        a = _get_cached_inner_model(prov, "p1", "m1")
+        b = _get_cached_inner_model(prov, "p1", "m1")
+        assert a is b
+        assert prov.build_calls == 1
+
+    def test_different_api_key_misses(self):
+        prov = _FakeProvider(api_key="k1")
+        a = _get_cached_inner_model(prov, "p1", "m1")
+        prov.api_key = "k2"
+        b = _get_cached_inner_model(prov, "p1", "m1")
+        assert a is not b
+        assert prov.build_calls == 2
+
+    def test_different_generate_kwargs_misses(self):
+        prov = _FakeProvider(generate_kwargs={"temperature": 0.5})
+        a = _get_cached_inner_model(prov, "p1", "m1")
+        prov._generate_kwargs = {"temperature": 0.9}
+        b = _get_cached_inner_model(prov, "p1", "m1")
+        assert a is not b
+        assert prov.build_calls == 2
+
+    def test_shared_across_providers_same_fingerprint(self):
+        # Two distinct provider instances with identical config share one
+        # cached client (the warm pool is process-global by fingerprint).
+        prov_a = _FakeProvider(api_key="k")
+        prov_b = _FakeProvider(api_key="k")
+        a = _get_cached_inner_model(prov_a, "p1", "m1")
+        b = _get_cached_inner_model(prov_b, "p1", "m1")
+        assert a is b
+
+    def test_flag_disabled_passthrough(self, monkeypatch):
+        monkeypatch.setenv("QWENPAW_PERF_MODEL_CLIENT_CACHE", "0")
+        prov = _FakeProvider()
+        a = _get_cached_inner_model(prov, "p1", "m1")
+        b = _get_cached_inner_model(prov, "p1", "m1")
+        assert a is not b
+        assert prov.build_calls == 2
+        assert model_client_cache_stats()["size"] == 0
+
+    def test_no_stale_on_provider_mutation(self):
+        prov = _FakeProvider(api_key="old")
+        a = _get_cached_inner_model(prov, "p1", "m1")
+        prov.api_key = "new"  # simulate update_config() in-place change
+        b = _get_cached_inner_model(prov, "p1", "m1")
+        assert a is not b
+        assert b.tag != a.tag  # built from the new api_key
+
+    def test_stats_never_expose_key(self):
+        prov = _FakeProvider(
+            api_key="SECRET_KEY",
+            base_url="https://secret.example",
+        )
+        _get_cached_inner_model(prov, "p1", "m1")
+
+        blob = json.dumps(model_client_cache_stats())
+        assert "SECRET_KEY" not in blob
+        assert "secret.example" not in blob
+        assert model_client_cache_stats()["size"] == 1
+        assert model_client_cache_stats()["misses"] == 1
+        assert model_client_cache_stats()["hits"] == 0
+
+    def test_concurrent_build_safe(self):
+        prov = _FakeProvider()
+        barrier = threading.Barrier(8)
+        results: list = []
+        results_lock = threading.Lock()
+
+        def worker():
+            barrier.wait()
+            m = _get_cached_inner_model(prov, "p1", "m1")
+            with results_lock:
+                results.append(m)
+
+        threads = [threading.Thread(target=worker) for _ in range(8)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        assert len(results) == 8
+        assert all(r is results[0] for r in results)  # all share one client
+        assert prov.build_calls == 1  # no duplicate build

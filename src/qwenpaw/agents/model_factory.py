@@ -14,6 +14,7 @@ import base64
 import json
 import logging
 import os
+import threading
 from typing import List, Sequence, Tuple, Type, Any, Union, Optional
 from urllib.parse import unquote, urlparse
 
@@ -92,6 +93,61 @@ def _model_client_fingerprint(provider, provider_id, model_id) -> tuple:
             sort_keys=True,
         ),
     )
+
+
+_MODEL_CLIENT_CACHE: dict = {}
+_MODEL_CLIENT_CACHE_LOCK = threading.Lock()
+_MODEL_CLIENT_CACHE_HITS = 0
+_MODEL_CLIENT_CACHE_MISSES = 0
+
+
+def _get_cached_inner_model(provider, provider_id, model_id):
+    """Return a (possibly cached) inner chat-model instance.
+
+    On a miss the provider builds the client once; later calls with the same
+    fingerprint reuse it (warm httpx pool). The build runs under the lock so
+    concurrent same-key callers share a single build. When the cache is
+    disabled (QWENPAW_PERF_MODEL_CLIENT_CACHE) this passes straight through to
+    ``provider.get_chat_model_instance``, identical to pre-cache behavior.
+    """
+    if not _model_client_cache_enabled():
+        return provider.get_chat_model_instance(model_id)
+
+    fp = _model_client_fingerprint(provider, provider_id, model_id)
+    global _MODEL_CLIENT_CACHE_HITS, _MODEL_CLIENT_CACHE_MISSES
+    with _MODEL_CLIENT_CACHE_LOCK:
+        cached = _MODEL_CLIENT_CACHE.get(fp)
+        if cached is not None:
+            _MODEL_CLIENT_CACHE_HITS += 1
+            return cached
+        # Build under the lock so concurrent same-key callers share it.
+        built = provider.get_chat_model_instance(model_id)
+        _MODEL_CLIENT_CACHE[fp] = built
+        _MODEL_CLIENT_CACHE_MISSES += 1
+        return built
+
+
+def clear_model_client_cache() -> None:
+    """Drop all cached clients and reset counters (tests + emergency reset)."""
+    global _MODEL_CLIENT_CACHE_HITS, _MODEL_CLIENT_CACHE_MISSES
+    with _MODEL_CLIENT_CACHE_LOCK:
+        _MODEL_CLIENT_CACHE.clear()
+        _MODEL_CLIENT_CACHE_HITS = 0
+        _MODEL_CLIENT_CACHE_MISSES = 0
+
+
+def model_client_cache_stats() -> dict:
+    """Return ``{size, hits, misses, enabled}``.
+
+    Never exposes key material (api_key / base_url).
+    """
+    with _MODEL_CLIENT_CACHE_LOCK:
+        return {
+            "size": len(_MODEL_CLIENT_CACHE),
+            "hits": _MODEL_CLIENT_CACHE_HITS,
+            "misses": _MODEL_CLIENT_CACHE_MISSES,
+            "enabled": _model_client_cache_enabled(),
+        }
 
 
 def _file_url_to_path(url: str) -> str:
