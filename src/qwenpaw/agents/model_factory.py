@@ -11,6 +11,7 @@ Example:
 
 
 import base64
+import json
 import logging
 import os
 from typing import List, Sequence, Tuple, Type, Any, Union, Optional
@@ -44,6 +45,51 @@ from ..providers.retry_chat_model import (
     RateLimitConfig,
 )
 from ..token_usage import TokenRecordingModelWrapper
+
+
+# ---------------------------------------------------------------------------
+# Model-client cache (§4.1): reuse the warm httpx connection pool across
+# requests instead of rebuilding OpenAIChatModelCompat (and its
+# openai.AsyncClient) on every call. Keyed by a config fingerprint so any
+# change to base_url / api_key / generate_kwargs yields a fresh client
+# (stale is impossible by construction — no invalidation hooks needed).
+# Toggle with QWENPAW_PERF_MODEL_CLIENT_CACHE (default on; 0/false/no/off).
+# ---------------------------------------------------------------------------
+
+_CACHE_DISABLE_VALUES = frozenset({"0", "false", "no", "off"})
+
+
+def _model_client_cache_enabled() -> bool:
+    """Cache is ON by default.
+
+    Disable via ``QWENPAW_PERF_MODEL_CLIENT_CACHE`` set to one of
+    ``{0, false, no, off}`` (case-insensitive).
+    """
+    raw = os.environ.get("QWENPAW_PERF_MODEL_CLIENT_CACHE")
+    if raw is None:
+        return True
+    return raw.strip().lower() not in _CACHE_DISABLE_VALUES
+
+
+def _model_client_fingerprint(provider, provider_id, model_id) -> tuple:
+    """Stable, hashable key capturing every input that determines the built
+    chat-model client.
+
+    ``base_url`` also pins ``default_headers`` (they are a pure function of
+    base_url in ``get_chat_model_instance``); ``generate_kwargs`` is included
+    so per-model parameter edits are seen as a miss.
+    """
+    return (
+        provider_id,
+        model_id,
+        provider.base_url,
+        provider.api_key,
+        json.dumps(
+            provider.get_effective_generate_kwargs(model_id),
+            sort_keys=True,
+            default=str,
+        ),
+    )
 
 
 def _file_url_to_path(url: str) -> str:
