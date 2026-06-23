@@ -17,6 +17,22 @@ from qwenpaw.agents.model_factory import (
     model_client_cache_stats,
 )
 import qwenpaw.agents.model_factory as mf
+from qwenpaw.exceptions import ProviderError
+
+
+def _make_running():
+    """Minimal agent_config.running for the factory retry/rate-limit build."""
+    return types.SimpleNamespace(
+        llm_retry_enabled=False,
+        llm_max_retries=1,
+        llm_backoff_base=0.1,
+        llm_backoff_cap=1.0,
+        llm_max_concurrent=4,
+        llm_max_qpm=0,
+        llm_rate_limit_pause=0.0,
+        llm_rate_limit_jitter=0.0,
+        llm_acquire_timeout=0.0,
+    )
 
 
 class _FakeModel:
@@ -209,17 +225,7 @@ class TestFactoryIntegration:
         prov = _FakeProvider(api_key="k")
 
         slot = types.SimpleNamespace(provider_id="p1", model="m1")
-        running = types.SimpleNamespace(
-            llm_retry_enabled=False,
-            llm_max_retries=1,
-            llm_backoff_base=0.1,
-            llm_backoff_cap=1.0,
-            llm_max_concurrent=4,
-            llm_max_qpm=0,
-            llm_rate_limit_pause=0.0,
-            llm_rate_limit_jitter=0.0,
-            llm_acquire_timeout=0.0,
-        )
+        running = _make_running()
         cfg = types.SimpleNamespace(
             id="agent-x",
             active_model=slot,
@@ -253,3 +259,62 @@ class TestFactoryIntegration:
         assert m1 is not m2
         # ...but the inner model was built only once (cache hit on 2nd call).
         assert prov.build_calls == 1
+
+    def test_factory_fallback_no_active_model_raises(self, monkeypatch):
+        # active_model=None -> fallback branch; manager reports no active
+        # model -> ProviderError("No active model configured.").
+        cfg = types.SimpleNamespace(
+            id="agent-x",
+            active_model=None,
+            running=_make_running(),
+        )
+        monkeypatch.setattr(
+            "qwenpaw.config.config.load_agent_config",
+            lambda aid: cfg,
+        )
+
+        class _Mgr:
+            def get_active_model(self):
+                return None
+
+        monkeypatch.setattr(
+            mf.ProviderManager,
+            "get_instance",
+            staticmethod(lambda: _Mgr()),  # pylint: disable=unnecessary-lambda
+        )
+
+        with pytest.raises(ProviderError) as exc:
+            mf.create_model_and_formatter(agent_id="agent-x")
+        assert "No active model configured." in str(exc.value)
+
+    def test_factory_fallback_provider_missing_raises(self, monkeypatch):
+        # active_model=None -> fallback; active model present but its
+        # provider is gone -> ProviderError("Active provider '...' not
+        # found.").
+        slot = types.SimpleNamespace(provider_id="ghost", model="m1")
+        cfg = types.SimpleNamespace(
+            id="agent-x",
+            active_model=None,
+            running=_make_running(),
+        )
+        monkeypatch.setattr(
+            "qwenpaw.config.config.load_agent_config",
+            lambda aid: cfg,
+        )
+
+        class _Mgr:
+            def get_active_model(self):
+                return slot  # non-empty -> passes the first validation
+
+            def get_provider(self, pid):
+                return None  # provider missing
+
+        monkeypatch.setattr(
+            mf.ProviderManager,
+            "get_instance",
+            staticmethod(lambda: _Mgr()),  # pylint: disable=unnecessary-lambda
+        )
+
+        with pytest.raises(ProviderError) as exc:
+            mf.create_model_and_formatter(agent_id="agent-x")
+        assert "Active provider 'ghost' not found." in str(exc.value)
