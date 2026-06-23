@@ -99,3 +99,43 @@ class TestTruncateToolResult:
         # the success path) — assert truncation, not the marker.
         assert not (tmp_path / "tool_results").exists()
         assert result != _OVERMAX
+
+
+class TestPruneChain:
+    async def test_prune_output_str_path(
+        self,
+        tmp_path,
+        monkeypatch,
+    ):
+        mgr = _make_manager(tmp_path, monkeypatch)
+        result = await mgr._prune_output(_OVERMAX, max_bytes=1000)
+        assert TRUNCATION_NOTICE_MARKER in result
+        assert list((tmp_path / "tool_results").glob("*.txt"))
+
+    async def test_prune_output_list_path(self, tmp_path, monkeypatch):
+        mgr = _make_manager(tmp_path, monkeypatch)
+        blocks = [{"type": "text", "text": _OVERMAX}]
+        result = await mgr._prune_output(blocks, max_bytes=1000)
+        assert TRUNCATION_NOTICE_MARKER in result[0]["text"]
+        assert list((tmp_path / "tool_results").glob("*.txt"))
+
+    async def test_prune_tool_result_integration(
+        self,
+        tmp_path,
+        monkeypatch,
+    ):
+        mgr = _make_manager(tmp_path, monkeypatch)
+        msg = types.SimpleNamespace(
+            content=[
+                {"type": "tool_result", "id": "t1", "output": _OVERMAX},
+            ],
+        )
+        await mgr._prune_tool_result(
+            messages=[msg],
+            recent_n=1,
+            old_max_bytes=1000,
+            recent_max_bytes=1000,
+        )
+        out = msg.content[0]["output"]
+        assert TRUNCATION_NOTICE_MARKER in out  # mutated in place
+        assert list((tmp_path / "tool_results").glob("*.txt"))
