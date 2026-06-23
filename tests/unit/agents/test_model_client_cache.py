@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import threading
+import types
 
 import pytest
 
@@ -191,3 +192,64 @@ class TestCachedInnerModel:
         for i in range(5):
             _get_cached_inner_model(prov, "p1", f"m{i}")
         assert model_client_cache_stats()["size"] <= 3
+
+
+class TestFactoryIntegration:
+    """create_model_and_formatter routes the inner model through the cache
+    while rebuilding the wrappers fresh each call (C4: agent rebuilt per
+    request; only the client is cached)."""
+
+    def setup_method(self):
+        clear_model_client_cache()
+
+    def teardown_method(self):
+        clear_model_client_cache()
+
+    def test_factory_caches_inner_rewraps_per_call(self, monkeypatch):
+        prov = _FakeProvider(api_key="k")
+
+        slot = types.SimpleNamespace(provider_id="p1", model="m1")
+        running = types.SimpleNamespace(
+            llm_retry_enabled=False,
+            llm_max_retries=1,
+            llm_backoff_base=0.1,
+            llm_backoff_cap=1.0,
+            llm_max_concurrent=4,
+            llm_max_qpm=0,
+            llm_rate_limit_pause=0.0,
+            llm_rate_limit_jitter=0.0,
+            llm_acquire_timeout=0.0,
+        )
+        cfg = types.SimpleNamespace(
+            id="agent-x",
+            active_model=slot,
+            running=running,
+        )
+        # load_agent_config is imported function-local from config.config.
+        monkeypatch.setattr(
+            "qwenpaw.config.config.load_agent_config",
+            lambda aid: cfg,
+        )
+
+        class _Mgr:
+            def get_provider(self, pid):
+                return prov if pid == "p1" else None
+
+        monkeypatch.setattr(
+            mf.ProviderManager,
+            "get_instance",
+            staticmethod(lambda: _Mgr()),  # pylint: disable=unnecessary-lambda
+        )
+        # Formatter construction is orthogonal to the cache; stub it.
+        monkeypatch.setattr(
+            mf,
+            "_create_formatter_instance",
+            lambda cls: object(),
+        )
+
+        m1, _ = mf.create_model_and_formatter(agent_id="agent-x")
+        m2, _ = mf.create_model_and_formatter(agent_id="agent-x")
+        # Wrappers (RetryChatModel) are freshly built each call...
+        assert m1 is not m2
+        # ...but the inner model was built only once (cache hit on 2nd call).
+        assert prov.build_calls == 1

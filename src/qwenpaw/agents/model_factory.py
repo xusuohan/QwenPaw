@@ -1111,7 +1111,9 @@ def create_model_and_formatter(
         except Exception:
             pass
 
-    # Create chat model from agent-specific or global config
+    # Create chat model from agent-specific or global config. The inner
+    # model is resolved through _get_cached_inner_model so the warm httpx
+    # connection pool is reused across requests (§4.1).
     if model_slot and model_slot.provider_id and model_slot.model:
         # Use agent-specific model
         manager = ProviderManager.get_instance()
@@ -1121,20 +1123,39 @@ def create_model_and_formatter(
                 message=f"Provider '{model_slot.provider_id}' not found.",
             )
 
-        model = provider.get_chat_model_instance(model_slot.model)
+        model = _get_cached_inner_model(
+            provider,
+            model_slot.provider_id,
+            model_slot.model,
+        )
         provider_id = model_slot.provider_id
     else:
-        # Fallback to global active model
-        model = ProviderManager.get_active_chat_model()
-        global_model = ProviderManager.get_instance().get_active_model()
-        if not global_model:
+        # Fallback to global active model. Replicates
+        # ProviderManager.get_active_chat_model()'s validation so the build
+        # goes through the cache; error messages are preserved exactly.
+        manager = ProviderManager.get_instance()
+        global_model = manager.get_active_model()
+        if (
+            global_model is None
+            or global_model.provider_id == ""
+            or global_model.model == ""
+        ):
+            raise ProviderError(
+                message="No active model configured.",
+            )
+        provider = manager.get_provider(global_model.provider_id)
+        if provider is None:
             raise ProviderError(
                 message=(
-                    "No active model configured. "
-                    "Please configure a model using 'qwenpaw models config' "
-                    "or set an agent-specific model."
+                    f"Active provider '{global_model.provider_id}' "
+                    f"not found."
                 ),
             )
+        model = _get_cached_inner_model(
+            provider,
+            global_model.provider_id,
+            global_model.model,
+        )
         provider_id = global_model.provider_id
 
     # Create the formatter based on the real model class
