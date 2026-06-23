@@ -15,6 +15,21 @@ from ....utils.atomic_io import write_json_atomic
 
 logger = logging.getLogger(__name__)
 
+_CHATS_CACHE_DISABLE_VALUES = frozenset({"0", "false", "no", "off"})
+
+
+def _chats_cache_enabled() -> bool:
+    """Chats read-cache is ON by default.
+
+    Disable via QWENPAW_PERF_CHATS_CACHE set to one of {0,false,no,off}
+    (case-insensitive). When disabled, load()/save() use the original
+    synchronous direct-disk behavior (the kill-switch path).
+    """
+    raw = os.environ.get("QWENPAW_PERF_CHATS_CACHE")
+    if raw is None:
+        return True
+    return raw.strip().lower() not in _CHATS_CACHE_DISABLE_VALUES
+
 
 class JsonChatRepository(BaseChatRepository):
     """chats.json repository (single-file storage).
