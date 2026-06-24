@@ -88,7 +88,6 @@ whisper = [
 ml = [
     "onnxruntime<1.24",
     "transformers>=4.30.0",
-    "modelscope>=1.35.0",
 ]
 browser = [
     "playwright>=1.49.0",
