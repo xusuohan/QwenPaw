@@ -54,6 +54,9 @@ def isolated_secret_dir(monkeypatch, tmp_path):
     return secret_dir
 
 
+@pytest.mark.skip(
+    reason="siliconflow providers are disabled (only octoken is active)",
+)
 def test_siliconflow_registered_in_provider_manager(
     isolated_secret_dir,
 ) -> None:
