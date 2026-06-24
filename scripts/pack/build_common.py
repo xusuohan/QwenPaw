@@ -225,6 +225,19 @@ def main() -> int:
                     ],
                     env=create_env,
                 )
+            # Pre-install llvmlite via conda (provides pre-built binary,
+            # avoids building from source which requires LLVM).
+            with profiler.stage("conda_preinstall"):
+                _run(
+                    [
+                        conda,
+                        "install",
+                        "-n",
+                        env_name,
+                        "-y",
+                        "llvmlite",
+                    ],
+                )
             # Install qwenpaw with all dependencies
             # Scope CMAKE_ARGS to this specific command to avoid affecting other
             # CMake-based packages. Only set if we need to compile from source.
