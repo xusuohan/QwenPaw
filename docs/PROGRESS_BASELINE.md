@@ -2,14 +2,14 @@
 
 > **用途**：本文是 QwenPaw 性能优化工作的**唯一权威基准**。任何新会话接手前，先读完本文，再按需读对应 spec / plan。本文锁定：已完成成果、设计决策、硬约束、剩余任务、流程约定与已知坑。
 >
-> **最后更新**：2026-06-24（Phase 4g / §5.4 secret_store 原子写完成后）。
-> **当前状态**：分支 `feature/usb-portable`，HEAD = `845e3926`。Phase 1–5 + Phase 4b/4c/4d/4e/4f/4g 已实现，部分 spec 章节仍待做。
+> **最后更新**：2026-06-24（Phase 4h / §3.5 Workspace.start 冗余去重完成后）。
+> **当前状态**：分支 `feature/usb-portable`，HEAD = `fc91941d`。Phase 1–5 + Phase 4b/4c/4d/4e/4f/4g/4h 已实现，部分 spec 章节仍待做。
 
 ---
 
 ## 0. 一句话现状
 
-三大核心场景（启动 IO / 运行时延迟 / 资源竞争）+ import 专项，**每个都已有实质进展**（Phase 1–5 + Phase 4b/4c/4d/4e/4f/4g），但都只完成了**首个子集**；剩余是各场景的深化项（见 §6）。**§4.1 模型客户端缓存已完成**（Phase 4b：工厂级 config 指纹缓存，复用热 httpx 池降 TTFT；stale 由指纹结构性免疫、免失效钩子；C4 满足仅缓存 client）。**§4.3 chats.json 缓存已完成**（Phase 4c：写穿透读缓存 + 异步原子写，每请求 2 同步读+1 同步写 → 0 读+1 异步写；write-first 保失败一致；kill-switch `QWENPAW_PERF_CHATS_CACHE`）。**§4.5 Part A tool result 溢写已完成**（Phase 4d：`_truncate_tool_result`/`_prune_output`/`_prune_tool_result` 三函数 async 传播，溢写走 `asyncio.to_thread(write_bytes_atomic)` 离事件循环+原子；7 测试全绿）。**§4.5 Part B token 增量缓存已 defer**（`EstimatedTokenCounter` 仅字节除法 `len/4`，代价极低；增量缓存需在 prune/summary 改消息时正确失效，复杂度不配收尾定位）。**§3.2 迁移戳幂等已完成**（Phase 4e：`.migration_stamp` 版本门控，稳态 2× load_config + ~6 stat → 1 戳读取；ensure 函数保持不门控作安全网；kill-switch `QWENPAW_PERF_MIGRATION_STAMP`；21 测试全绿）。**§3.4 restore stat 精简已完成**（Phase 4f：`_cleanup_stale_restore_artifacts_locked` + `recover_mount_point_swap` 用单次 `os.scandir` 替代 5–7 次 `.exists()` stat；exFAT 上 1 listing ≪ N stat；19 测试全绿）。**§5.4 secret_store 原子写已完成**（Phase 4g：`_write_key_file` 从裸 `write_text` + `chmod` 改为 `write_bytes_atomic`；崩溃安全 + 删除 exFAT 无效 chmod；20 测试全绿）。下一个最高价值项见 §6 剩余任务。
+三大核心场景（启动 IO / 运行时延迟 / 资源竞争）+ import 专项，**每个都已有实质进展**（Phase 1–5 + Phase 4b/4c/4d/4e/4f/4g/4h），但都只完成了**首个子集**；剩余是各场景的深化项（见 §6）。**§4.1 模型客户端缓存已完成**（Phase 4b：工厂级 config 指纹缓存，复用热 httpx 池降 TTFT；stale 由指纹结构性免疫、免失效钩子；C4 满足仅缓存 client）。**§4.3 chats.json 缓存已完成**（Phase 4c：写穿透读缓存 + 异步原子写，每请求 2 同步读+1 同步写 → 0 读+1 异步写；write-first 保失败一致；kill-switch `QWENPAW_PERF_CHATS_CACHE`）。**§4.5 Part A tool result 溢写已完成**（Phase 4d：`_truncate_tool_result`/`_prune_output`/`_prune_tool_result` 三函数 async 传播，溢写走 `asyncio.to_thread(write_bytes_atomic)` 离事件循环+原子；7 测试全绿）。**§4.5 Part B token 增量缓存已 defer**（`EstimatedTokenCounter` 仅字节除法 `len/4`，代价极低；增量缓存需在 prune/summary 改消息时正确失效，复杂度不配收尾定位）。**§3.2 迁移戳幂等已完成**（Phase 4e：`.migration_stamp` 版本门控，稳态 2× load_config + ~6 stat → 1 戳读取；ensure 函数保持不门控作安全网；kill-switch `QWENPAW_PERF_MIGRATION_STAMP`；21 测试全绿）。**§3.4 restore stat 精简已完成**（Phase 4f：`_cleanup_stale_restore_artifacts_locked` + `recover_mount_point_swap` 用单次 `os.scandir` 替代 5–7 次 `.exists()` stat；exFAT 上 1 listing ≪ N stat；19 测试全绿）。**§5.4 secret_store 原子写已完成**（Phase 4g：`_write_key_file` 从裸 `write_text` + `chmod` 改为 `write_bytes_atomic`；崩溃安全 + 删除 exFAT 无效 chmod；20 测试全绿）。**§3.5 Workspace.start 冗余去重已完成**（Phase 4h：`ensure_skill_pool_initialized` 加进程级 once 标记，N agent → 1 init + N-1 no-op；`_migrate_legacy_weixin_data` 加 workspace 路径级 once 标记，同 workspace 重启跳过 3 迁移调用；6 测试全绿）。下一个最高价值项见 §6 剩余任务。
 
 ---
 
@@ -19,7 +19,7 @@
 - 工作分支：`feature/usb-portable`（USB 便携版特性分支，承载本次性能优化；**不要合并到 main**——还有未完成项）。
 - 规格文档：`docs/superpowers/specs/2026-06-22-性能优化-design.md`（**完整设计**，三大场景 + import 专项，含瓶颈映射基线 file:line）。
 - Phase 计划：`docs/superpowers/plans/2026-06-22-性能优化-phase{1..5}-*.md`。
-- 本次性能优化提交范围：`9dc5c3b0`（spec）→ `845e3926`（HEAD），共 ~40 个提交。
+- 本次性能优化提交范围：`9dc5c3b0`（spec）→ `fc91941d`（HEAD），共 ~41 个提交。
 - 本次工作**未触碰** `src/qwenpaw/cli/desktop_cmd.py`（用户预存的未暂存改动，见 §8 坑）。
 
 ---
@@ -47,7 +47,7 @@
 
 **spec 各章节归属**（防止重复/遗漏）：
 - §2.1/2.2 基石 → Phase 1 ✅
-- §3.1 遥测后台 + §3.3 语言硬编码 → Phase 3 ✅；§3.2 迁移戳幂等 → Phase 4e ✅；§3.4 restore stat 精简 → Phase 4f ✅；§3.5/§3.6 → 见 §6 待办
+- §3.1 遥测后台 + §3.3 语言硬编码 → Phase 3 ✅；§3.2 迁移戳幂等 → Phase 4e ✅；§3.4 restore stat 精简 → Phase 4f ✅；§3.5 Workspace.start 冗余去重 → Phase 4h ✅；§3.6 → 见 §6 待办
 - §4.2 session 异步 + §4.4 auth 缓存 → Phase 4 ✅；§4.1 模型客户端缓存 → Phase 4b ✅；§4.3 chats 缓存 → Phase 4c ✅；§4.5 Part A tool result 溢写 → Phase 4d ✅；§4.5 Part B token 增量缓存 → defer（字节除法代价极低，失效复杂度不匹配）
 - §5.1 八处原子写 + §5.2 ChannelManager 死锁 → Phase 2 ✅；§5.3 日志 → 见 §6；§5.4 secret_store 原子写 → Phase 4g ✅
 
@@ -148,13 +148,18 @@ start_import_prefetch(cap_mb=None, import_order_file=None) -> threading.Thread
 - 进程内已有 `_master_key_lock`（threading.Lock 双检锁）覆盖并发；单实例（C2）无跨进程风险。
 - 测试：`tests/unit/security/test_secret_store.py` 新增 3 个（write_bytes_atomic 委托验证/内容正确/幂等写入）。全 20 测试通过。
 
+### Phase 4h — §3.5 Workspace.start 冗余去重（`fc91941d`）
+- `agents/skills_manager.py`：`ensure_skill_pool_initialized` 加模块级 `_skill_pool_initialized` 标记；首次调用后所有后续调用立即返回 `False`（零 IO）。Skill pool 是全局共享目录，N agent 启动 → 1 次初始化 + N-1 次 no-op。
+- `app/workspace/workspace.py`：`_migrate_legacy_weixin_data` 加 ClassVar `_weixin_migrated_workspaces`（`set[str]`）；以 workspace 路径为 key 去重。同 workspace 重启时跳过 3 迁移函数（chats/jobs/sessions），不同 workspace 独立迁移。
+- 进程级标记（单实例 C2，无跨进程风险）。现有调用方无需改动。
+- 测试：`tests/unit/agents/test_skill_pool_once.py`（3）+ `tests/unit/workspace/test_weixin_migration_once.py`（3）。全 63 workspace+agents 测试通过。
+
 ---
 
 ## 6. 剩余任务（按 spec 章节，含理由 + 风险 + 建议顺序）
 
 | spec 节 | 内容 | 风险/理由 | 建议优先级 |
 |---|---|---|---|
-| §3.5 | Workspace.start 冗余去重 | 中：`ensure_skill_pool_initialized` 提升到 MultiAgentManager 级；需读 `workspace.py` + `multi_agent_manager.start_all_configured_agents` | 中 |
 | §3.3 load_envs | `load_envs_into_environ` 从 import 移到 lifespan | 中：现有注释说 import 期加载是刻意的（envs 在 lifespan 前可能被依赖）——**必须先分析依赖**再移 | 低（除非分析清楚）|
 | §5.3 | 日志多进程竞态（QueueHandler + 双文件）| 中：desktop 启动器 + backend 子进程各写独立日志文件 + 进程内 QueueHandler | 中 |
 | §3.6.2 实测 | import 预读真机测量 | **必须用户在 USB/exFAT 真机**跑 `-X importtime` 前后对比；若反噬设 `QWENPAW_PERF_IMPORT_PREFETCH=0` | 用户侧验证 |
@@ -198,9 +203,9 @@ start_import_prefetch(cap_mb=None, import_order_file=None) -> threading.Thread
 
 **基石**：`src/qwenpaw/utils/atomic_io.py`、`background_tasks.py`、`import_prefetch.py`
 **已迁移的写站点**（Phase 2/3/4）：`config/utils.py`、`config/config.py`、`app/auth.py`、`app/channels/dingtalk/{channel,ai_card}.py`、`local_models/manager.py`、`app/crons/repo/json_repo.py`、`app/runner/repo/json_repo.py`、`app/runner/session.py`、`utils/telemetry.py`、`constant.py`
-**结构性改动**：`app/_app.py`（lifespan：runner 接入 + 遥测后台 + 孤儿清理 + run_migrations 封装）、`app/channels/manager.py`（replace_channel 死锁修复）、`cli/main.py`（prefetch 接入）、`agents/model_factory.py`（§4.1 模型客户端指纹缓存 + 接入工厂两分支）、`app/runner/repo/json_repo.py`（§4.3 chats 读缓存 + 写穿透异步写）、`agents/context/light_context_manager.py`（§4.5 Part A tool result 溢写 async + atomic）、`app/migration.py`（§3.2 戳门控 + run_migrations 封装）、`backup/_utils/safe_swap.py` + `_mount_swap.py`（§3.4 scandir 优化）、`security/secret_store.py`（§5.4 原子写）
+**结构性改动**：`app/_app.py`（lifespan：runner 接入 + 遥测后台 + 孤儿清理 + run_migrations 封装）、`app/channels/manager.py`（replace_channel 死锁修复）、`cli/main.py`（prefetch 接入）、`agents/model_factory.py`（§4.1 模型客户端指纹缓存 + 接入工厂两分支）、`app/runner/repo/json_repo.py`（§4.3 chats 读缓存 + 写穿透异步写）、`agents/context/light_context_manager.py`（§4.5 Part A tool result 溢写 async + atomic）、`app/migration.py`（§3.2 戳门控 + run_migrations 封装）、`backup/_utils/safe_swap.py` + `_mount_swap.py`（§3.4 scandir 优化）、`security/secret_store.py`（§5.4 原子写）、`agents/skills_manager.py` + `app/workspace/workspace.py`（§3.5 进程级 once 标记）
 **构建脚本**：`scripts/pack/build_{linux,macos,win,win_portable}.{sh,ps1}`（均 `--invalidation-mode checked-hash`）
-**测试**：`tests/unit/utils/{test_atomic_io,test_background_tasks,test_import_prefetch,test_telemetry_marker}.py`、`tests/unit/app/{test_runner_session,test_auth_cache,test_json_repo,test_migration_stamp}.py`、`tests/unit/channels/test_channel_manager.py`、`tests/unit/agents/test_model_client_cache.py`、`tests/unit/app/test_chats_cache.py`、`tests/unit/agents/context/test_tool_result_offload.py`、`tests/unit/backup/test_restore_scandir.py`
+**测试**：`tests/unit/utils/{test_atomic_io,test_background_tasks,test_import_prefetch,test_telemetry_marker}.py`、`tests/unit/app/{test_runner_session,test_auth_cache,test_json_repo,test_migration_stamp}.py`、`tests/unit/channels/test_channel_manager.py`、`tests/unit/agents/{test_model_client_cache,test_skill_pool_once}.py`、`tests/unit/app/test_chats_cache.py`、`tests/unit/agents/context/test_tool_result_offload.py`、`tests/unit/backup/test_restore_scandir.py`、`tests/unit/workspace/test_weixin_migration_once.py`
 
 **规格/计划**：`docs/superpowers/specs/2026-06-22-性能优化-design.md`（设计 + 瓶颈基线）、`docs/superpowers/plans/2026-06-22-性能优化-phase{1..5}-*.md`（各 Phase 任务）
 
