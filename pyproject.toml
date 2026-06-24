@@ -100,7 +100,9 @@ channels = [
     "twilio>=9.10.2",
 ]
 full = [
-    "qwenpaw[local,whisper,ml,browser,channels]",
+    "qwenpaw[local,ml,browser,channels]",
+    # whisper excluded: requires numba→llvmlite which needs LLVM to build.
+    # Install separately: pip install openai-whisper
 ]
 sip = [
     "pyVoIP>=1.6.0",
