@@ -379,15 +379,16 @@ def main() -> int:
             _run(pack_cmd)
             print(f"Packed to {out_path}")
     finally:
+        # Save profiling report even when a build stage fails
+        if args.profiling_output:
+            profiler.save(args.profiling_output)
+            print(f"Profiling report saved to {args.profiling_output}")
         # Only remove env if not cached
         if not use_cache:
             try:
                 _run([conda, "env", "remove", "-n", env_name, "-y"])
             except Exception as e:
                 print(f"Warning: Failed to remove temp env {env_name}: {e}")
-    if args.profiling_output:
-        profiler.save(args.profiling_output)
-        print(f"Profiling report saved to {args.profiling_output}")
     return 0
 
 
