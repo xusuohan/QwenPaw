@@ -1453,8 +1453,21 @@ def migrate_pool_builtin_language_fields() -> bool:
     )
 
 
+# Process-level once flag (§3.5).  After the first successful call,
+# subsequent calls skip all IO.  Single-instance (C2) means no cross-
+# process concern; threading.Lock on callers serialises the first call.
+_skill_pool_initialized: bool = False
+
+
 def ensure_skill_pool_initialized() -> bool:
-    """Ensure the local skill pool exists and built-ins are synced into it."""
+    """Ensure the local skill pool exists and built-ins are synced into it.
+
+    Idempotent within a process: after the first successful call,
+    subsequent calls return ``False`` immediately without any IO.
+    """
+    global _skill_pool_initialized
+    if _skill_pool_initialized:
+        return False
     pool_dir = get_skill_pool_dir()
     created = False
     if not pool_dir.exists():
@@ -1470,6 +1483,7 @@ def ensure_skill_pool_initialized() -> bool:
         import_builtin_skills()
     else:
         migrate_pool_builtin_language_fields()
+    _skill_pool_initialized = True
     return created
 
 
