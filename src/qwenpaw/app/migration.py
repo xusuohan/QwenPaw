@@ -5,6 +5,7 @@ Handles migration from legacy single-agent config to new multi-agent structure.
 """
 import json
 import logging
+import os
 import shutil
 from pathlib import Path
 
@@ -886,3 +887,87 @@ def _do_ensure_qa_agent() -> None:
         "Created builtin QA agent with workspace: %s",
         qa_workspace,
     )
+
+
+# ---------------------------------------------------------------------------
+# Migration stamp (§3.2)
+# ---------------------------------------------------------------------------
+# Skips redundant migration scans on every cold start.  A single stamp
+# read replaces 3× load_config() + ~10 stat calls.
+
+_STAMP_FILENAME = ".migration_stamp"
+
+
+def _get_current_version() -> str:
+    """Return the current package version string."""
+    from ..__version__ import __version__
+
+    return __version__
+
+
+def _migration_stamp_enabled() -> bool:
+    """Check QWENPAW_PERF_MIGRATION_STAMP flag (default on).
+
+    Disable via ``QWENPAW_PERF_MIGRATION_STAMP`` set to one of
+    ``{0, false, no, off}`` (case-insensitive).
+    """
+    raw = os.environ.get("QWENPAW_PERF_MIGRATION_STAMP")
+    if raw is not None and raw.lower() in {"0", "false", "no", "off"}:
+        return False
+    return True
+
+
+def _should_run_migrations() -> bool:
+    """True if migrations should run; False if stamp matches current version.
+
+    Safe defaults: missing stamp, corrupt JSON, missing ``version`` key,
+    or disabled flag all return True (run migrations).
+    """
+    if not _migration_stamp_enabled():
+        return True
+    stamp_path = WORKING_DIR / _STAMP_FILENAME
+    try:
+        data = json.loads(stamp_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return True
+    stamp_version = data.get("version")
+    if stamp_version is None:
+        return True
+    return stamp_version != _get_current_version()
+
+
+def _write_migration_stamp() -> None:
+    """Write migration stamp with current version and timestamp.
+
+    Uses atomic write (tmp + fsync + replace) for exFAT safety.
+    """
+    from datetime import datetime, timezone
+
+    from ..utils.atomic_io import write_json_atomic
+
+    stamp_path = WORKING_DIR / _STAMP_FILENAME
+    write_json_atomic(
+        stamp_path,
+        {
+            "version": _get_current_version(),
+            "ts": datetime.now(timezone.utc).isoformat(),
+        },
+    )
+
+
+def run_migrations() -> None:
+    """Run startup migrations with stamp-based skip.
+
+    Legacy migrations (workspace + skills) are gated behind the stamp:
+    if the stamp version matches the current package version, they are
+    skipped entirely.  ``ensure_default_agent_exists`` and
+    ``ensure_qa_agent_exists`` always run — they are cheap safety nets
+    (load_config + a few stat calls) that recreate missing agents.
+    """
+    if _should_run_migrations():
+        migrate_legacy_workspace_to_default_agent()
+        migrate_legacy_skills_to_skill_pool()
+        _write_migration_stamp()
+
+    ensure_default_agent_exists()
+    ensure_qa_agent_exists()

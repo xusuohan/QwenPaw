@@ -2,6 +2,7 @@
 """JSON-based chat repository."""
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -11,8 +12,24 @@ from pathlib import Path
 
 from .base import BaseChatRepository
 from ..models import ChatsFile
+from ....utils.atomic_io import write_json_atomic
 
 logger = logging.getLogger(__name__)
+
+_CHATS_CACHE_DISABLE_VALUES = frozenset({"0", "false", "no", "off"})
+
+
+def _chats_cache_enabled() -> bool:
+    """Chats read-cache is ON by default.
+
+    Disable via QWENPAW_PERF_CHATS_CACHE set to one of {0,false,no,off}
+    (case-insensitive). When disabled, load()/save() use the original
+    synchronous direct-disk behavior (the kill-switch path).
+    """
+    raw = os.environ.get("QWENPAW_PERF_CHATS_CACHE")
+    if raw is None:
+        return True
+    return raw.strip().lower() not in _CHATS_CACHE_DISABLE_VALUES
 
 
 class JsonChatRepository(BaseChatRepository):
@@ -35,11 +52,25 @@ class JsonChatRepository(BaseChatRepository):
         if isinstance(path, str):
             path = Path(path)
         self._path = path.expanduser()
+        # §4.3 in-process read cache + write-through. _cache holds the last
+        # successfully-persisted ChatsFile; _cache_lock guards it as
+        # defense-in-depth (ChatManager already serializes CRUD per-workspace
+        # via its own lock; this protects against direct repo use). Disabled
+        # via QWENPAW_PERF_CHATS_CACHE -> load/save fall back to direct disk.
+        self._cache: ChatsFile | None = None
+        self._cache_lock = asyncio.Lock()
 
     @property
     def path(self) -> Path:
         """Get the repository file path."""
         return self._path
+
+    def _load_from_disk_sync(self) -> ChatsFile:
+        """Read chats.json from disk synchronously (the original load body)."""
+        if not self._path.exists():
+            return ChatsFile(version=1, chats=[])
+        data = json.loads(self._path.read_text(encoding="utf-8"))
+        return ChatsFile.model_validate(data)
 
     async def load(self) -> ChatsFile:
         """Load chat specs from JSON file.
@@ -47,32 +78,52 @@ class JsonChatRepository(BaseChatRepository):
         Returns:
             ChatsFile with all chat specs
         """
-        if not self._path.exists():
-            return ChatsFile(version=1, chats=[])
-
-        data = json.loads(self._path.read_text(encoding="utf-8"))
-        return ChatsFile.model_validate(data)
+        if not _chats_cache_enabled():
+            return self._load_from_disk_sync()
+        async with self._cache_lock:
+            if self._cache is None:
+                # Cache miss: read disk off the event loop (once per repo
+                # lifetime). Concurrent callers serialize on this cold read
+                # by design (no thundering herd of N cold reads); subsequent
+                # loads hit the cache (0 IO).
+                self._cache = await asyncio.to_thread(
+                    self._load_from_disk_sync,
+                )
+            return self._cache.model_copy(deep=True)
 
     async def save(self, chats_file: ChatsFile) -> None:
         """Save chat specs to JSON file atomically.
 
         Args:
             chats_file: ChatsFile to persist
+
+        Note: the disk write is offloaded to a thread, so a caller bypassing
+        ChatManager's per-workspace lock could observe a one-write-behind
+        stale cache during the write. Under normal use (ChatManager
+        serializes CRUD) this cannot happen; the cache always reflects the
+        last successfully-persisted state once save() returns.
         """
-        # Create parent directory if needed
-        self._path.parent.mkdir(parents=True, exist_ok=True)
-
-        # Write to temp file first (atomic write)
-        tmp_path = self._path.with_suffix(self._path.suffix + ".tmp")
-        payload = chats_file.model_dump(mode="json")
-
-        tmp_path.write_text(
-            json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True),
-            encoding="utf-8",
+        if not _chats_cache_enabled():
+            write_json_atomic(
+                self._path,
+                chats_file.model_dump(mode="json"),
+                sort_keys=True,
+            )
+            return
+        snapshot = chats_file.model_copy(deep=True)
+        payload = snapshot.model_dump(mode="json")
+        # Write-through: persist first, update the cache only on success so
+        # the cache always reflects the last successfully-persisted state. A
+        # failed write raises before the cache is touched, leaving cache and
+        # disk consistent.
+        await asyncio.to_thread(
+            write_json_atomic,
+            self._path,
+            payload,
+            sort_keys=True,
         )
-
-        # Atomic replace (shutil.move handles cross-disk on Windows)
-        shutil.move(str(tmp_path), str(self._path))
+        async with self._cache_lock:
+            self._cache = snapshot
 
 
 def migrate_legacy_weixin_chats_file(chats_path: Path | str) -> None:

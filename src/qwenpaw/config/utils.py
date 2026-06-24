@@ -27,6 +27,7 @@ from ..constant import (
     WORKING_DIR,
     EnvVarLoader,
 )
+from ..utils.atomic_io import write_json_atomic
 from .config import (
     Config,
     HeartbeatConfig,
@@ -787,13 +788,10 @@ def save_config(config: Config, config_path: Optional[Path] = None) -> None:
     if config_path is None:
         config_path = get_config_path()
     config_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(config_path, "w", encoding="utf-8") as file:
-        json.dump(
-            config.model_dump(mode="json", by_alias=True),
-            file,
-            indent=2,
-            ensure_ascii=False,
-        )
+    write_json_atomic(
+        config_path,
+        config.model_dump(mode="json", by_alias=True),
+    )
 
     # Invalidate cache after saving
     with _config_lock:

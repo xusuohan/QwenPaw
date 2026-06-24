@@ -137,13 +137,21 @@ def _read_key_file() -> Optional[str]:
 
 
 def _write_key_file(key_hex: str) -> None:
+    """Write master key file atomically (crash-safe).
+
+    Uses ``write_bytes_atomic`` (tmp + fsync + os.replace) so a crash
+    mid-write never leaves a partially-written key file — the old
+    content remains intact until the new content is fully on disk.
+
+    chmod intentionally omitted: exFAT (USB portable deployment, C1) does
+    not support UNIX permissions.  Security relies on SECRET_DIR being
+    inside WORKING_DIR (already user-private).
+    """
+    from ..utils.atomic_io import write_bytes_atomic
+
     path = _master_key_file()
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(key_hex, encoding="utf-8")
-    try:
-        os.chmod(path, 0o600)
-    except OSError:
-        pass
+    write_bytes_atomic(path, key_hex.encode("utf-8"))
 
 
 def _generate_master_key() -> str:

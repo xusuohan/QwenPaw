@@ -9,6 +9,7 @@ are sanitized before being used as filenames.
 import os
 import re
 import json
+import asyncio
 import logging
 import shutil
 
@@ -18,6 +19,7 @@ import aiofiles
 from agentscope.session import SessionBase
 from agentscope_runtime.engine.schemas.exception import ConfigurationException
 from ...exceptions import AgentStateError
+from ...utils.atomic_io import write_json_atomic
 
 logger = logging.getLogger(__name__)
 
@@ -285,12 +287,12 @@ class SafeJSONSession(SessionBase):
             user_id=user_id,
             channel=channel,
         )
-        with open(
+        await asyncio.to_thread(
+            write_json_atomic,
             session_save_path,
-            "w",
-            encoding="utf-8",
-        ) as f:
-            f.write(json.dumps(state_dicts, ensure_ascii=False))
+            state_dicts,
+            indent=None,
+        )
 
         logger.info(
             "Saved session state to %s successfully.",

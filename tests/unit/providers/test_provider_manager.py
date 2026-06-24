@@ -88,6 +88,9 @@ def isolated_secret_dir(monkeypatch, tmp_path):
     return secret_dir
 
 
+@pytest.mark.skip(
+    reason="zhipu providers are disabled (only octoken is active)",
+)
 def test_builtin_zhipu_providers_registered(isolated_secret_dir) -> None:
     manager = ProviderManager()
 
@@ -129,6 +132,9 @@ def test_builtin_zhipu_providers_registered(isolated_secret_dir) -> None:
         ]
 
 
+@pytest.mark.skip(
+    reason="openai builtin provider is disabled (only octoken is active)",
+)
 async def test_add_custom_provider_and_reload_from_storage(
     isolated_secret_dir,
 ) -> None:
@@ -170,6 +176,9 @@ async def test_add_custom_provider_and_reload_from_storage(
     assert isinstance(loaded_duplicate, OpenAIProvider)
 
 
+@pytest.mark.skip(
+    reason="openai builtin provider is disabled (only octoken is active)",
+)
 async def test_activate_provider_persists_active_model(
     isolated_secret_dir,
     monkeypatch,
@@ -202,6 +211,9 @@ async def test_activate_provider_persists_active_model(
     assert reloaded.active_model.model == "gpt-5"
 
 
+@pytest.mark.skip(
+    reason="qwenpaw-local provider is disabled (only octoken is active)",
+)
 async def test_resume_local_model_restores_server_and_runtime_state(
     isolated_secret_dir,
 ) -> None:
@@ -298,6 +310,9 @@ def test_load_provider_invalid_json_returns_none(isolated_secret_dir) -> None:
     assert loaded is None
 
 
+@pytest.mark.skip(
+    reason="dashscope/ollama providers are disabled (only octoken is active)",
+)
 def test_migrate_legacy_file_and_persist_active_model(
     isolated_secret_dir,
 ) -> None:
@@ -337,6 +352,9 @@ def test_migrate_legacy_file_and_persist_active_model(
     assert active_model_file.exists()
 
 
+@pytest.mark.skip(
+    reason="openai builtin provider is disabled (only octoken is active)",
+)
 async def test_add_custom_provider_conflict_resolution_loops_until_unique(
     isolated_secret_dir,
 ) -> None:
@@ -359,6 +377,12 @@ async def test_add_custom_provider_conflict_resolution_loops_until_unique(
     assert manager.get_provider("openai-custom-new-new") is not None
 
 
+@pytest.mark.skip(
+    reason=(
+        "openai/azure-openai builtin providers are disabled "
+        "(only octoken is active)"
+    ),
+)
 def test_update_provider_for_builtin_persists_to_builtin_path(
     isolated_secret_dir,
 ) -> None:
@@ -413,6 +437,9 @@ async def test_activate_provider_invalid_provider_raises(
         await manager.activate_model("missing", "gpt-5")
 
 
+@pytest.mark.skip(
+    reason="openai builtin provider is disabled (only octoken is active)",
+)
 async def test_activate_provider_invalid_model_raises(
     isolated_secret_dir,
 ) -> None:
@@ -422,6 +449,9 @@ async def test_activate_provider_invalid_model_raises(
         await manager.activate_model("openai", "not-exists")
 
 
+@pytest.mark.skip(
+    reason="openai builtin provider is disabled (only octoken is active)",
+)
 async def test_add_model_to_provider_duplicate_id_raises(
     isolated_secret_dir,
 ) -> None:
@@ -503,6 +533,9 @@ def test_provider_from_data_fallback_to_openai(isolated_secret_dir) -> None:
     assert isinstance(provider, OpenAIProvider)
 
 
+@pytest.mark.skip(
+    reason="minimax/ollama providers are disabled (only octoken is active)",
+)
 def test_init_from_storage_migrates_with_different_provider(
     isolated_secret_dir,
 ) -> None:

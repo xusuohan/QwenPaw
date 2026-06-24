@@ -9,6 +9,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List
 
+from ....utils.atomic_io import write_json_atomic
+
 PROCESSING = "1"
 INPUTING = "2"
 FINISHED = "3"
@@ -70,9 +72,4 @@ class AICardPendingStore:
             "updated_at": int(time.time() * 1000),
             "pending_cards": pending_cards,
         }
-        tmp = self._path.with_suffix(".tmp")
-        tmp.write_text(
-            json.dumps(data, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
-        tmp.replace(self._path)
+        write_json_atomic(self._path, data)

@@ -124,6 +124,16 @@ export default defineConfig(({ mode }) => {
             ) {
               return "antd-vendor";
             }
+            // Lodash (both CJS and ESM variants)
+            // Must be in a dedicated chunk to prevent Rollup from deduplicating
+            // lodash (CJS) and lodash-es (ESM) across different consumer chunks,
+            // which breaks MapCache's prototype-based method assignment.
+            if (
+              id.includes("node_modules/lodash/") ||
+              id.includes("node_modules/lodash-es/")
+            ) {
+              return "lodash-vendor";
+            }
             // AgentScope design system
             if (id.includes("node_modules/@agentscope-ai/")) {
               return "agentscope-vendor";

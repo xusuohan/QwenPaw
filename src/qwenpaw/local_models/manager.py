@@ -11,6 +11,7 @@ from typing import Any
 from pydantic import BaseModel, Field, ValidationError
 
 from ..constant import DEFAULT_LOCAL_PROVIDER_DIR
+from ..utils.atomic_io import write_json_atomic
 
 from .llamacpp import LlamaCppBackend, LlamaCppServerSetupResult
 from .model_manager import LocalModelInfo as RecommendedLocalModelInfo
@@ -85,15 +86,9 @@ class LocalModelManager:  # pylint: disable=too-many-public-methods
         payload: dict[str, Any],
     ) -> None:
         """Write local runtime settings to disk in a worker thread."""
-        config_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(config_path, "w", encoding="utf-8") as file_obj:
-            json.dump(
-                payload,
-                file_obj,
-                ensure_ascii=False,
-                indent=2,
-            )
+        write_json_atomic(config_path, payload)
         try:
+            # chmod is best-effort (no-op on exFAT); kept for non-exFAT.
             config_path.chmod(0o600)
         except OSError:
             pass

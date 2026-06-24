@@ -19,6 +19,7 @@ from agentscope_runtime.engine.schemas.exception import (
 )
 
 from .timezone import detect_system_timezone
+from ..utils.atomic_io import write_json_atomic
 from ..constant import (
     HEARTBEAT_DEFAULT_EVERY,
     HEARTBEAT_DEFAULT_TARGET,
@@ -1868,13 +1869,10 @@ def save_agent_config(
 
     agent_config_path = workspace_dir / "agent.json"
 
-    with open(agent_config_path, "w", encoding="utf-8") as f:
-        json.dump(
-            agent_config.model_dump(exclude_none=True),
-            f,
-            ensure_ascii=False,
-            indent=2,
-        )
+    write_json_atomic(
+        agent_config_path,
+        agent_config.model_dump(exclude_none=True),
+    )
 
     # Invalidate cache after saving
     with _agent_config_lock:

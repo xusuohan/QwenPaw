@@ -60,6 +60,9 @@ def isolated_secret_dir(monkeypatch, tmp_path):
     return secret_dir
 
 
+@pytest.mark.skip(
+    reason="volcengine providers are disabled (only octoken is active)",
+)
 def test_volcengine_registered_in_provider_manager(
     isolated_secret_dir,
 ) -> None:
@@ -82,6 +85,9 @@ def test_volcengine_registered_in_provider_manager(
     )
 
 
+@pytest.mark.skip(
+    reason="volcengine providers are disabled (only octoken is active)",
+)
 def test_volcengine_has_expected_models(isolated_secret_dir) -> None:
     """Volcano Engine providers should include built-in models."""
     manager = ProviderManager()

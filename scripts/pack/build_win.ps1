@@ -210,7 +210,7 @@ if (Test-Path $pythonExe) {
   # Compile all Python files to bytecode
   # -q: quiet mode (only show errors)
   # -j 0: use all CPU cores for parallel compilation
-  & $pythonExe -m compileall -q -j 0 $EnvRoot
+  & $pythonExe -m compileall -q -j 0 --invalidation-mode checked-hash $EnvRoot
   
   if ($LASTEXITCODE -eq 0) {
     $compileEnd = Get-Date

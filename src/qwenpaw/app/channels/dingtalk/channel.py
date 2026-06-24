@@ -60,6 +60,7 @@ from ....config.config import DingTalkConfig as DingTalkChannelConfig
 from ....config.utils import get_config_path
 from ....constant import DEFAULT_MEDIA_DIR
 from ....exceptions import ChannelError
+from ....utils.atomic_io import write_json_atomic
 
 from ..base import (
     BaseChannel,
@@ -459,14 +460,7 @@ class DingTalkChannel(BaseChannel):
         """Persist in-memory session webhook store to disk."""
         path = self._session_webhook_store_path()
         try:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            with open(path, "w", encoding="utf-8") as f:
-                json.dump(
-                    self._session_webhook_store,
-                    f,
-                    indent=2,
-                    ensure_ascii=False,
-                )
+            write_json_atomic(path, self._session_webhook_store)
         except Exception:
             logger.debug(
                 "dingtalk save session_webhook store to %s failed",
