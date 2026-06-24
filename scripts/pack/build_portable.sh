@@ -75,6 +75,14 @@ QwenPaw Portable
 - 需要在目标平台分别构建对应版本
 README
 
+# 将 profiling 报告移入便携版目录（清理前）
+for _pf in "${DIST}/build_profiling.json" "${DIST}/build_common_profiling.json"; do
+  if [[ -f "${_pf}" ]]; then
+    mv "${_pf}" "${PORTABLE_DIR}/"
+    echo "== Moved $(basename "${_pf}") into portable dir =="
+  fi
+done
+
 # 清理本次构建的中间产物，保留已有的便携版目录
 echo "== Cleaning build artifacts =="
 # 删除 dist/ 下所有非 QwenPaw-Portable_* 目录的文件和目录
