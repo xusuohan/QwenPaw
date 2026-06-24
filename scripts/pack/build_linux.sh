@@ -59,6 +59,14 @@ mkdir -p "${DIST}/linux/env"
 tar -xzf "$ARCHIVE" -C "${DIST}/linux/env" --strip-components=0
 
 _profiler end unpack
+
+_profiler start strip
+echo "== Stripping debug symbols and removing static libs =="
+find "${DIST}/linux/env" -name "*.so" -exec strip -x {} \; 2>/dev/null || true
+find "${DIST}/linux/env" -name "*.a" -delete 2>/dev/null || true
+find "${DIST}/linux/env" -name "*.h" -delete 2>/dev/null || true
+_profiler end strip
+
 _profiler start compileall
 echo "== Pre-compiling Python bytecode =="
 "${DIST}/linux/env/bin/python" -m compileall -q -j 0 --invalidation-mode checked-hash "${DIST}/linux/env" >/dev/null 2>&1 || true

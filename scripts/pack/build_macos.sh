@@ -74,6 +74,15 @@ tar -xzf "$ARCHIVE" -C "${APP_DIR}/Contents/Resources/env" --strip-components=0
 
 _profiler end unpack
 
+_profiler start strip
+echo "== Stripping debug symbols and removing static libs =="
+ENV_DIR="${APP_DIR}/Contents/Resources/env"
+find "${ENV_DIR}" -name "*.so" -exec strip -x {} \; 2>/dev/null || true
+find "${ENV_DIR}" -name "*.dylib" -exec strip -x {} \; 2>/dev/null || true
+find "${ENV_DIR}" -name "*.a" -delete 2>/dev/null || true
+find "${ENV_DIR}" -name "*.h" -delete 2>/dev/null || true
+_profiler end strip
+
 _profiler start compileall
 
 echo "== Pre-compiling Python bytecode =="
