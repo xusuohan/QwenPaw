@@ -10,9 +10,16 @@ PACK_DIR="$(cd "$(dirname "$0")" && pwd)"
 # 检测构建环境
 source "${PACK_DIR}/check_env.sh"
 DIST="${DIST:-dist}"
+# --- Profiling ---
+PROFILING_STATE="${DIST}/.build_profiler_state.json"
+PROFILING_OUTPUT="${DIST}/build_profiling.json"
+_profiler() {
+  python "${PACK_DIR}/build_profiler.py" "$@" --state-file "${PROFILING_STATE}"
+}
 ARCHIVE="${DIST}/qwenpaw-env-linux.tar.gz"
 
 echo "== Building wheel (includes console frontend) =="
+_profiler start wheel_build --platform "Linux-$(uname -m)" --python-version "3.10"
 # Skip wheel_build if dist already has a wheel for current version
 VERSION_FILE="${REPO_ROOT}/src/qwenpaw/__version__.py"
 CURRENT_VERSION=""
@@ -40,16 +47,24 @@ else
   bash scripts/wheel_build.sh
 fi
 
+_profiler end wheel_build
+_profiler start conda_pack_env
 echo "== Building conda-packed env =="
-python "${PACK_DIR}/build_common.py" --output "$ARCHIVE" --format tar.gz
+python "${PACK_DIR}/build_common.py" --output "$ARCHIVE" --format tar.gz --profiling-output "${DIST}/build_common_profiling.json"
 
+_profiler end conda_pack_env
+_profiler start unpack
 echo "== Unpacking env =="
 mkdir -p "${DIST}/linux/env"
 tar -xzf "$ARCHIVE" -C "${DIST}/linux/env" --strip-components=0
 
+_profiler end unpack
+_profiler start compileall
 echo "== Pre-compiling Python bytecode =="
 "${DIST}/linux/env/bin/python" -m compileall -q -j 0 --invalidation-mode checked-hash "${DIST}/linux/env" >/dev/null 2>&1 || true
 
+_profiler end compileall
+_profiler start platform_pack
 # Create launcher script
 cat > "${DIST}/linux/start.sh" << 'LAUNCHER'
 #!/usr/bin/env bash
@@ -143,5 +158,9 @@ trap _cleanup_orphans EXIT
 exec "$ENV_DIR/bin/python" -u -m qwenpaw desktop --log-level "$LOG_LEVEL"
 LAUNCHER
 chmod +x "${DIST}/linux/start.sh"
+
+_profiler end platform_pack
+_profiler save "${PROFILING_OUTPUT}"
+echo "== Profiling data saved to ${PROFILING_OUTPUT} =="
 
 echo "== Built Linux portable at ${DIST}/linux/ =="
