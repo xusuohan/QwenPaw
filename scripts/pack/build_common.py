@@ -187,10 +187,13 @@ def main() -> int:
 
     conda = _conda_exe()
 
-    # Check for cached environment
+    # Check for cached environment.
+    # Only require the conda env to exist (not the archive, since
+    # build_portable.sh deletes dist/ artifacts after each build).
+    # When cached, we skip env creation and only re-run conda-pack.
     env_hash = _compute_env_hash(wheel_path, args.python)
     cached_env = _find_cached_env(env_hash)
-    use_cache = cached_env is not None and out_path.exists()
+    use_cache = cached_env is not None
 
     if use_cache:
         assert cached_env is not None
