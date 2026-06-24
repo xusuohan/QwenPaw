@@ -33,7 +33,8 @@ from ..backup._utils.safe_swap import cleanup_startup_restore_artifacts
 from ..utils.logging import (
     setup_logger,
     add_project_file_handler,
-    LOG_FILE_PATH,
+    stop_queue_listeners,
+    LOG_BACKEND_PATH,
 )
 from ..utils.system_info import summarize_python_environment
 from ..utils.atomic_io import cleanup_orphan_tmps
@@ -219,7 +220,7 @@ async def lifespan(  # pylint: disable=too-many-statements,too-many-branches
     app: FastAPI,
 ):
     startup_start_time = time.time()
-    add_project_file_handler(LOG_FILE_PATH)
+    add_project_file_handler(LOG_BACKEND_PATH)
 
     # ================================================================
     # Phase 1: Fast synchronous setup (target < 100ms)
@@ -563,6 +564,11 @@ async def lifespan(  # pylint: disable=too-many-statements,too-many-branches
             logger.error(f"Error stopping TokenUsageManager: {e}")
 
         logger.info("Application shutdown complete")
+
+        # §5.3: Flush queued log records and stop listener threads.
+        # Must run AFTER the final log.info above so that message is
+        # drained by the listener before it exits.
+        stop_queue_listeners()
 
 
 app = FastAPI(
