@@ -62,9 +62,26 @@ mimetypes.add_type("application/javascript", ".mjs")
 mimetypes.add_type("text/css", ".css")
 mimetypes.add_type("application/wasm", ".wasm")
 
-# Load persisted env vars into os.environ at module import time
-# so they are available before the lifespan starts.
-load_envs_into_environ()
+
+# §3.3: load_envs_into_environ is called at package import time by
+# qwenpaw/__init__.py:43 — BEFORE constant.py is first imported, so all
+# 26+ module-level EnvVarLoader constants see persisted values.
+# The _app.py module-level call was REDUNDANT (overwrite=False → no-op).
+# We now call it once more in lifespan as a safety net for edge cases
+# (e.g. uvicorn --reload spawning a fresh child without __init__.py).
+
+
+def _load_envs_defer_enabled() -> bool:
+    """Return True when §3.3 env-loading defer is active (default: on)."""
+    val = (
+        os.environ.get(
+            "QWENPAW_PERF_LOAD_ENVS_DEFER",
+            "1",
+        )
+        .strip()
+        .lower()
+    )
+    return val not in ("0", "false", "no", "off")
 
 
 # Dynamic runner that selects the correct workspace runner based on request
@@ -221,6 +238,13 @@ async def lifespan(  # pylint: disable=too-many-statements,too-many-branches
 ):
     startup_start_time = time.time()
     add_project_file_handler(LOG_BACKEND_PATH)
+
+    # §3.3: Safety-net env load.  __init__.py:43 already loaded envs
+    # before constant.py was imported; this second call (overwrite=False)
+    # is normally a no-op but guards against edge cases where
+    # __init__.py's call was skipped or failed.
+    if _load_envs_defer_enabled():
+        load_envs_into_environ()
 
     # ================================================================
     # Phase 1: Fast synchronous setup (target < 100ms)
