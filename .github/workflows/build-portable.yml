@@ -68,6 +68,69 @@ jobs:
           path: dist/QwenPaw-Portable/
           retention-days: 7
 
+      - name: Upload profiling report
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-profiling-macos-arm64
+          path: dist/build_profiling.json
+          retention-days: 30
+
+  # ============================================================================
+  # Build macOS (Intel x86_64) portable version
+  # ============================================================================
+  build-macos-x86_64:
+    name: Build macOS (Intel x86_64)
+    runs-on: macos-13
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Miniconda
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          miniconda-version: "latest"
+          activate-environment: ""
+          auto-activate-base: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: console/package-lock.json
+
+      - name: Install npm dependencies
+        run: cd console && npm ci
+
+      - name: Build portable version
+        run: |
+          source "$CONDA/bin/activate"
+          bash ./scripts/pack/build_portable.sh
+        env:
+          DIST: dist
+
+      - name: Verify build output
+        run: |
+          ls -la dist/QwenPaw-Portable/
+          ls -la dist/QwenPaw-Portable/macOS/
+          du -sh dist/QwenPaw-Portable/
+
+      - name: Upload macOS x86_64 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: QwenPaw-Portable-macOS-x86_64
+          path: dist/QwenPaw-Portable/
+          retention-days: 7
+
+      - name: Upload profiling report
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-profiling-macos-x86_64
+          path: dist/build_profiling.json
+          retention-days: 30
+
   # ============================================================================
   # Build Linux portable version
   # ============================================================================
@@ -117,6 +180,13 @@ jobs:
           path: dist/QwenPaw-Portable/
           retention-days: 7
 
+      - name: Upload profiling report
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-profiling-linux
+          path: dist/build_profiling.json
+          retention-days: 30
+
   # ============================================================================
   # Build Windows portable version
   # ============================================================================
@@ -162,6 +232,23 @@ jobs:
           Get-ChildItem -Path dist -Recurse | Select-Object FullName, Length
         shell: powershell
 
+      - name: Smoke test
+        run: |
+          $portableDir = Get-ChildItem -Path dist -Directory -Filter "QwenPaw-Portable_*" | Select-Object -First 1
+          if ($portableDir) {
+            $pyExe = Join-Path $portableDir.FullName "windows\env\python.exe"
+            if (Test-Path $pyExe) {
+              Write-Host "Running smoke test with $pyExe"
+              & $pyExe -c "import qwenpaw; print('Smoke test PASSED: ' + qwenpaw.__version__)"
+              if ($LASTEXITCODE -ne 0) { throw "Smoke test failed" }
+            } else {
+              Write-Host "WARNING: python.exe not found at $pyExe"
+            }
+          } else {
+            Write-Host "WARNING: No QwenPaw-Portable_* directory found"
+          }
+        shell: powershell
+
       - name: Upload Windows installer
         uses: actions/upload-artifact@v4
         with:
@@ -169,12 +256,19 @@ jobs:
           path: dist/QwenPaw-Setup-*.exe
           retention-days: 7
 
+      - name: Upload profiling report
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-profiling-windows
+          path: dist/build_profiling.json
+          retention-days: 30
+
   # ============================================================================
   # Create release with all artifacts
   # ============================================================================
   create-release:
     name: Create Release
-    needs: [build-macos, build-linux, build-windows]
+    needs: [build-macos, build-macos-x86_64, build-linux, build-windows]
     runs-on: ubuntu-latest
     if: github.event_name == 'release'
 
@@ -197,6 +291,11 @@ jobs:
           cd artifacts/QwenPaw-Portable-macOS
           tar -czf ../../QwenPaw-Portable-macOS.tar.gz .
 
+      - name: Create portable archive (macOS x86_64)
+        run: |
+          cd artifacts/QwenPaw-Portable-macOS-x86_64
+          tar -czf ../../QwenPaw-Portable-macOS-x86_64.tar.gz .
+
       - name: Create portable archive (Linux)
         run: |
           cd artifacts/QwenPaw-Portable-Linux
@@ -207,6 +306,7 @@ jobs:
         with:
           files: |
             QwenPaw-Portable-macOS.tar.gz
+            QwenPaw-Portable-macOS-x86_64.tar.gz
             QwenPaw-Portable-Linux.tar.gz
             artifacts/QwenPaw-Setup-Windows/*.exe
         env:
