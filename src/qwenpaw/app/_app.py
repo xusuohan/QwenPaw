@@ -47,12 +47,7 @@ from ..envs import load_envs_into_environ
 from ..providers.provider_manager import ProviderManager
 from ..local_models.manager import LocalModelManager
 from .multi_agent_manager import MultiAgentManager
-from .migration import (
-    migrate_legacy_workspace_to_default_agent,
-    migrate_legacy_skills_to_skill_pool,
-    ensure_default_agent_exists,
-    ensure_qa_agent_exists,
-)
+from .migration import run_migrations
 from .channels.registry import register_custom_channel_routes
 
 # Apply log level on load so reload child process gets same level as CLI.
@@ -294,10 +289,7 @@ async def lifespan(  # pylint: disable=too-many-statements,too-many-branches
         )
 
     logger.debug("Checking for legacy config migration...")
-    migrate_legacy_workspace_to_default_agent()
-    ensure_default_agent_exists()
-    migrate_legacy_skills_to_skill_pool()
-    ensure_qa_agent_exists()
+    run_migrations()
 
     # Create core managers (instant — no I/O)
     logger.debug("Initializing MultiAgentManager...")
