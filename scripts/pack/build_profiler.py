@@ -44,6 +44,7 @@ class BuildProfiler:
         self._cache_hit = cache_hit
         self._stages: list[dict[str, Any]] = []
         self._global_start = time.monotonic()
+        self._global_start_is_wall = False
 
     @contextmanager
     def stage(self, name: str) -> Generator[None, None, None]:
@@ -71,6 +72,7 @@ class BuildProfiler:
         Intended for CLI / cross-process use.  For in-process usage prefer
         the :meth:`stage` context manager.
         """
+        self._global_start_is_wall = True
         self._stages.append({
             "name": name,
             "start_ts": time.time(),
@@ -99,7 +101,8 @@ class BuildProfiler:
 
     def report(self) -> dict[str, Any]:
         """Generate the full profiling report as a dict."""
-        total = time.monotonic() - self._global_start
+        now = time.time() if self._global_start_is_wall else time.monotonic()
+        total = now - self._global_start
         return {
             "platform": self._platform,
             "python_version": self._python_version,
@@ -128,6 +131,8 @@ class BuildProfiler:
         ``time.monotonic()`` is **not** guaranteed to be consistent across
         processes).
         """
+        self._global_start = time.time()
+        self._global_start_is_wall = True
         p = Path(path)
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(
@@ -137,7 +142,7 @@ class BuildProfiler:
                     "python_version": self._python_version,
                     "wheel_hash": self._wheel_hash,
                     "cache_hit": self._cache_hit,
-                    "global_start": time.time(),
+                    "global_start": self._global_start,
                     "stages": list(self._stages),
                 },
                 indent=2,
@@ -157,6 +162,7 @@ class BuildProfiler:
             cache_hit=data.get("cache_hit", False),
         )
         prof._global_start = data["global_start"]
+        prof._global_start_is_wall = True
         prof._stages = data["stages"]
         return prof
 
