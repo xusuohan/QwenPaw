@@ -27,6 +27,15 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
+
+def _list_child_names(directory: Path) -> set[str]:
+    """Return names of direct children via single scandir (§3.4)."""
+    try:
+        return {entry.name for entry in os.scandir(directory)}
+    except OSError:
+        return set()
+
+
 OLD_CONTENT_DIR_NAME = ".qwenpaw_restore_old"
 STATE_FILE_NAME = ".qwenpaw_restore_state"
 STATE_TMP_FILE_NAME = ".qwenpaw_restore_state.tmp"
@@ -150,7 +159,12 @@ def _swap_mount_point_contents(dst: Path, tmp_dst: Path) -> None:
     _cleanup_artifacts(dst, tmp_dst)
 
 
-def recover_mount_point_swap(dst: Path, tmp_dst: Path) -> None:
+def recover_mount_point_swap(
+    dst: Path,
+    tmp_dst: Path,
+    *,
+    child_names: set[str] | None = None,
+) -> None:
     """Recover a crashed mount-point fallback swap, if one is present.
 
     ``committed`` means the new content is already complete, so recovery only
@@ -159,20 +173,26 @@ def recover_mount_point_swap(dst: Path, tmp_dst: Path) -> None:
     ``evacuating_old`` or an invalid state is treated conservatively: move back
     any old children that had already been evacuated.  Markerless old-content
     directories are left untouched because they are not proven restore state.
-    """
-    old_dir = dst / OLD_CONTENT_DIR_NAME
-    has_marker = (dst / STATE_FILE_NAME).exists() or (
-        dst / STATE_TMP_FILE_NAME
-    ).exists()
 
-    if not (old_dir.exists() or has_marker):
+    If *child_names* is provided, it is used instead of scanning *dst*
+    (single-scandir optimization for startup cleanup — §3.4).
+    """
+    if child_names is None:
+        child_names = _list_child_names(dst)
+
+    has_old_dir = OLD_CONTENT_DIR_NAME in child_names
+    has_marker = (
+        STATE_FILE_NAME in child_names or STATE_TMP_FILE_NAME in child_names
+    )
+
+    if not (has_old_dir or has_marker):
         return
 
-    if old_dir.exists() and not has_marker:
+    if has_old_dir and not has_marker:
         logger.warning(
             "Leaving possible restore content directory untouched because "
             "no restore state marker exists: %s",
-            old_dir,
+            dst / OLD_CONTENT_DIR_NAME,
         )
         return
 
@@ -202,7 +222,7 @@ def recover_mount_point_swap(dst: Path, tmp_dst: Path) -> None:
             "(state=%r, old_dir=%s, tmp_dir=%s)",
             dst,
             state,
-            old_dir,
+            dst / OLD_CONTENT_DIR_NAME,
             tmp_dst,
         )
         raise
