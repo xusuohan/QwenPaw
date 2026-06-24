@@ -246,7 +246,7 @@ def main() -> int:
                     "3",
                     "--timeout",
                     "120",
-                    f"qwenpaw @ {wheel_uri}",
+                    f"qwenpaw[full] @ {wheel_uri}",
                 ]
                 _max_retries = 2
                 for _attempt in range(_max_retries + 1):
