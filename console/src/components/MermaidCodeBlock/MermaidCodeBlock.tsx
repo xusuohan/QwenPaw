@@ -1,18 +1,26 @@
 import { useEffect, useState } from "react";
-import mermaid from "mermaid";
+import type { Mermaid } from "mermaid";
 import styles from "./index.module.less";
 
-let mermaidInitialized = false;
+let mermaidModule: Mermaid | null = null;
+let mermaidInitPromise: Promise<Mermaid> | null = null;
 let idCounter = 0;
 
-function ensureMermaidInit() {
-  if (mermaidInitialized) return;
-  mermaid.initialize({
-    startOnLoad: false,
-    theme: "neutral",
-    securityLevel: "loose",
-  });
-  mermaidInitialized = true;
+async function getMermaid(): Promise<Mermaid> {
+  if (mermaidModule) return mermaidModule;
+  if (!mermaidInitPromise) {
+    mermaidInitPromise = import("mermaid").then((mod) => {
+      const m = mod.default;
+      m.initialize({
+        startOnLoad: false,
+        theme: "neutral",
+        securityLevel: "loose",
+      });
+      mermaidModule = m;
+      return m;
+    });
+  }
+  return mermaidInitPromise;
 }
 
 interface MermaidCodeBlockProps {
@@ -33,16 +41,14 @@ export function MermaidCodeBlock({ chart }: MermaidCodeBlockProps) {
       return;
     }
 
-    ensureMermaidInit();
-
     let cancelled = false;
     const id = `mermaid-${Date.now()}-${idCounter++}`;
     setSvg("");
     setError("");
     setIsRendering(true);
 
-    mermaid
-      .render(id, trimmedChart)
+    getMermaid()
+      .then((mermaid) => mermaid.render(id, trimmedChart))
       .then(({ svg: rendered }) => {
         if (!cancelled) {
           setSvg(rendered);
