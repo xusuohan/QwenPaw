@@ -21,12 +21,8 @@ from build_profiler import BuildProfiler  # noqa: E402
 class TestBuildProfiler:
     """Unit tests for BuildProfiler class."""
 
-    def test_stage_context_manager_records_timing(
-        self,
-        tmp_path: Path,
-    ) -> None:
+    def test_stage_context_manager_records_timing(self) -> None:
         """stage() context manager records start/end/duration."""
-        _ = tmp_path
         profiler = BuildProfiler(platform="test", python_version="3.10.0")
         with profiler.stage("test_stage"):
             time.sleep(0.05)
@@ -37,9 +33,8 @@ class TestBuildProfiler:
         assert stage["duration_s"] >= 0.04
         assert stage["start_ts"] < stage["end_ts"]
 
-    def test_multiple_stages_in_order(self, tmp_path: Path) -> None:
+    def test_multiple_stages_in_order(self) -> None:
         """Multiple stages are recorded in execution order."""
-        _ = tmp_path
         profiler = BuildProfiler(platform="test", python_version="3.10.0")
         with profiler.stage("first"):
             pass
@@ -49,9 +44,8 @@ class TestBuildProfiler:
         names = [s["name"] for s in report["stages"]]
         assert names == ["first", "second"]
 
-    def test_stage_records_exception(self, tmp_path: Path) -> None:
+    def test_stage_records_exception(self) -> None:
         """Stage records exit_code=1 when exception occurs."""
-        _ = tmp_path
         profiler = BuildProfiler(platform="test", python_version="3.10.0")
         with pytest.raises(ValueError):
             with profiler.stage("fail_stage"):
@@ -75,9 +69,8 @@ class TestBuildProfiler:
         assert len(data["stages"]) == 1
         assert "total_duration_s" in data
 
-    def test_report_metadata(self, tmp_path: Path) -> None:
+    def test_report_metadata(self) -> None:
         """report() includes platform, python_version, wheel_hash."""
-        _ = tmp_path
         profiler = BuildProfiler(
             platform="Linux-x86_64",
             python_version="3.10.12",
@@ -90,9 +83,8 @@ class TestBuildProfiler:
         assert report["wheel_hash"] == "abc123"
         assert report["cache_hit"] is True
 
-    def test_total_duration_covers_all_stages(self, tmp_path: Path) -> None:
+    def test_total_duration_covers_all_stages(self) -> None:
         """total_duration_s >= sum of individual stage durations."""
-        _ = tmp_path
         profiler = BuildProfiler(platform="test", python_version="3.10.0")
         with profiler.stage("a"):
             time.sleep(0.02)
@@ -100,7 +92,36 @@ class TestBuildProfiler:
             time.sleep(0.02)
         report = profiler.report()
         sum_stages = sum(s["duration_s"] for s in report["stages"])
-        assert report["total_duration_s"] >= sum_stages
+        # 0.002 tolerance for per-stage rounding vs total
+        assert report["total_duration_s"] >= sum_stages - 0.002
+
+    def test_dump_load_state_round_trip(self, tmp_path: Path) -> None:
+        """dump_state/load_state round-trip preserves metadata and stages."""
+        state_file = tmp_path / "state.json"
+        prof = BuildProfiler(
+            platform="Linux-arm64",
+            python_version="3.11.0",
+            wheel_hash="deadbeef",
+            cache_hit=True,
+        )
+        prof.begin_stage("download")
+        time.sleep(0.01)
+        prof.finish_stage("download")
+
+        prof.dump_state(state_file)
+
+        restored = BuildProfiler.load_state(state_file)
+        report = restored.report()
+        assert report["platform"] == "Linux-arm64"
+        assert report["python_version"] == "3.11.0"
+        assert report["wheel_hash"] == "deadbeef"
+        assert report["cache_hit"] is True
+        assert len(report["stages"]) == 1
+        stage = report["stages"][0]
+        assert stage["name"] == "download"
+        assert stage["end_ts"] is not None
+        assert stage["duration_s"] is not None
+        assert stage["duration_s"] >= 0.0
 
     def test_cli_start_end_save(self, tmp_path: Path) -> None:
         """CLI interface: start/end/save subcommands work via argv."""

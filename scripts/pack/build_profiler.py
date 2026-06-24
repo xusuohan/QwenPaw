@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """Build profiling tool — stage timing + structured JSON report.
 
 Usage as library:
@@ -17,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 import time
 from contextlib import contextmanager
 from pathlib import Path
@@ -45,7 +47,7 @@ class BuildProfiler:
 
     @contextmanager
     def stage(self, name: str) -> Generator[None, None, None]:
-        """Context manager that times a named build stage."""
+        """Context manager that times a named build stage (in-process, uses monotonic)."""
         start_ts = time.monotonic()
         exit_code = 0
         try:
@@ -62,6 +64,38 @@ class BuildProfiler:
                 "duration_s": round(end_ts - start_ts, 3),
                 "exit_code": exit_code,
             })
+
+    def begin_stage(self, name: str) -> None:
+        """Open a new stage entry with a wall-clock start timestamp.
+
+        Intended for CLI / cross-process use.  For in-process usage prefer
+        the :meth:`stage` context manager.
+        """
+        self._stages.append({
+            "name": name,
+            "start_ts": time.time(),
+            "end_ts": None,
+            "duration_s": None,
+            "exit_code": 0,
+        })
+
+    def finish_stage(self, name: str) -> bool:
+        """Close the last open stage matching *name*.
+
+        Returns ``True`` if a matching open stage was found and closed,
+        ``False`` otherwise (a warning is printed to stderr).
+        """
+        for stage in reversed(self._stages):
+            if stage["name"] == name and stage["end_ts"] is None:
+                now = time.time()
+                stage["end_ts"] = now
+                stage["duration_s"] = round(now - stage["start_ts"], 3)
+                return True
+        print(
+            f"WARNING: no open stage named {name!r} to finish",
+            file=sys.stderr,
+        )
+        return False
 
     def report(self) -> dict[str, Any]:
         """Generate the full profiling report as a dict."""
@@ -87,7 +121,13 @@ class BuildProfiler:
     # -- Persistence helpers for CLI mode (shell/PowerShell interop) --
 
     def dump_state(self, path: str | Path) -> None:
-        """Serialize internal state to JSON for cross-process continuation."""
+        """Serialize internal state to JSON for cross-process continuation.
+
+        Uses ``time.time()`` for *global_start* so that the value is
+        comparable across process boundaries (important on Windows where
+        ``time.monotonic()`` is **not** guaranteed to be consistent across
+        processes).
+        """
         p = Path(path)
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(
@@ -97,7 +137,7 @@ class BuildProfiler:
                     "python_version": self._python_version,
                     "wheel_hash": self._wheel_hash,
                     "cache_hit": self._cache_hit,
-                    "global_start": self._global_start,
+                    "global_start": time.time(),
                     "stages": list(self._stages),
                 },
                 indent=2,
@@ -146,23 +186,12 @@ def _cli_main() -> None:  # pylint: disable=too-many-branches
             prof = BuildProfiler.load_state(state_path)
         else:
             prof = BuildProfiler(platform=args.platform, python_version=args.python_version)
-        prof._stages.append({  # pylint: disable=protected-access
-            "name": args.name,
-            "start_ts": time.monotonic(),
-            "end_ts": None,
-            "duration_s": None,
-            "exit_code": 0,
-        })
+        prof.begin_stage(args.name)
         prof.dump_state(state_path)
     elif args.command == "end":
         prof = BuildProfiler.load_state(state_path)
-        now = time.monotonic()
-        # Find the last open stage with this name
-        for s in reversed(prof._stages):  # pylint: disable=protected-access
-            if s["name"] == args.name and s["end_ts"] is None:
-                s["end_ts"] = now
-                s["duration_s"] = round(now - s["start_ts"], 3)
-                break
+        if not prof.finish_stage(args.name):
+            raise SystemExit(1)
         prof.dump_state(state_path)
     elif args.command == "save":
         prof = BuildProfiler.load_state(state_path)
