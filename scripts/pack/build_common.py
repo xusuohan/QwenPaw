@@ -386,12 +386,11 @@ def main() -> int:
         if args.profiling_output:
             profiler.save(args.profiling_output)
             print(f"Profiling report saved to {args.profiling_output}")
-        # Only remove env if not cached
-        if not use_cache:
-            try:
-                _run([conda, "env", "remove", "-n", env_name, "-y"])
-            except Exception as e:
-                print(f"Warning: Failed to remove temp env {env_name}: {e}")
+        # Intentionally NOT deleting the conda env here.
+        # The env is cached for future builds (keyed by wheel content hash).
+        # Deleting it would break the cache chain — every build would be a
+        # cache miss, negating the 3-9 min savings on subsequent builds.
+        # To clean up old cached envs: conda env remove -n <env_name> -y
     return 0
 
 
