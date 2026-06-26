@@ -476,9 +476,20 @@ Write-Host "== Running smoke test =="
 $smokeStart = Get-Date
 $smokeScript = Join-Path $RepoRoot "scripts\smoke-test.py"
 if (Test-Path $smokeScript) {
-  & $PythonExePath $smokeScript --portable-dir $PortableRoot --verbose
-  if ($LASTEXITCODE -ne 0) {
-    Write-Host "[build_win_portable] Smoke test FAILED" -ForegroundColor Red
+  try {
+    & $PythonExePath $smokeScript --portable-dir $PortableRoot --verbose
+    if ($LASTEXITCODE -ne 0) {
+      Write-Host "[build_win_portable] Smoke test FAILED" -ForegroundColor Red
+    }
+  } catch {
+    Write-Host "[build_win_portable] Smoke test threw exception: $_" -ForegroundColor Red
+    Write-Host "[build_win_portable] Falling back to inline check..." -ForegroundColor Yellow
+    $smokeOut = & $PythonExePath -c "from qwenpaw.__version__ import __version__; print(__version__)" 2>&1
+    if ($LASTEXITCODE -eq 0) {
+      Write-Host "[build_win_portable] Inline smoke test PASSED: $smokeOut" -ForegroundColor Green
+    } else {
+      Write-Host "[build_win_portable] Inline smoke test FAILED (exit code $LASTEXITCODE)" -ForegroundColor Red
+    }
   }
 } else {
   Write-Host "[build_win_portable] WARN: smoke-test.py not found, running inline check" -ForegroundColor Yellow

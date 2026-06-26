@@ -51,13 +51,13 @@ def run_check(python: Path, code: str, env: dict[str, str] | None = None) -> tup
         return False, str(e)
 
 
-def collect_diagnostics(python: Path, output_dir: Path) -> None:
+def collect_diagnostics(python: Path, output_dir: Path, env: dict[str, str] | None = None) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     for label, code in [
         ("python_version", "import sys; print(sys.version)"),
-        ("pip_list", "import subprocess; subprocess.run([sys.executable, '-m', 'pip', 'list'])"),
+        ("pip_list", "import subprocess, sys; subprocess.run([sys.executable, '-m', 'pip', 'list'])"),
     ]:
-        ok, out = run_check(python, code)
+        ok, out = run_check(python, code, env=env)
         (output_dir / f"{label}.txt").write_text(out or "(no output)", encoding="utf-8")
     (output_dir / "path.txt").write_text(str(Path.home()) + "\n" + str(python), encoding="utf-8")
 
@@ -78,11 +78,8 @@ def smoke_test(portable_dir: Path, verbose: bool = False) -> bool:
         bin_dir = portable_dir / "windows" / "env"
         scripts_dir = portable_dir / "windows" / "env" / "Scripts"
         env["PATH"] = f"{bin_dir}{os.pathsep}{scripts_dir}{os.pathsep}{env.get('PATH', '')}"
-    elif platform == "macOS":
-        bin_dir = portable_dir / "macOS" / "env" / "bin"
-        env["PATH"] = f"{bin_dir}{os.pathsep}{env.get('PATH', '')}"
-    else:  # linux
-        bin_dir = portable_dir / "linux" / "env" / "bin"
+    else:  # macOS / Linux
+        bin_dir = portable_dir / platform / "env" / "bin"
         env["PATH"] = f"{bin_dir}{os.pathsep}{env.get('PATH', '')}"
 
     for check in IMPORT_CHECKS:
@@ -92,7 +89,7 @@ def smoke_test(portable_dir: Path, verbose: bool = False) -> bool:
             if verbose:
                 print(f"  {out}")
             diag_dir = portable_dir.parent / "diagnostics"
-            collect_diagnostics(python, diag_dir)
+            collect_diagnostics(python, diag_dir, env=env)
             (diag_dir / "smoke_test_output.txt").write_text(
                 f"Failed: {check}\n{out}", encoding="utf-8"
             )
@@ -103,7 +100,7 @@ def smoke_test(portable_dir: Path, verbose: bool = False) -> bool:
     if not ok or not SEMVER_RE.match(version):
         print(f"FAIL: Invalid version '{version}'")
         diag_dir = portable_dir.parent / "diagnostics"
-        collect_diagnostics(python, diag_dir)
+        collect_diagnostics(python, diag_dir, env=env)
         (diag_dir / "smoke_test_output.txt").write_text(
             f"Failed: version check\n{version}", encoding="utf-8"
         )

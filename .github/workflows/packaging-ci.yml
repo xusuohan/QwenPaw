@@ -64,7 +64,7 @@ jobs:
           DIST: dist
 
       - name: Run smoke test
-        run: python scripts/smoke-test.py --verbose
+        run: python3 scripts/smoke-test.py --verbose
         shell: bash
 
       - name: Upload diagnostics (on failure)
