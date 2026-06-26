@@ -242,6 +242,32 @@ if ($compileExit -ne 0) {
 }
 Stop-ProfilStage "compileall"
 
+# --- Strip debug symbols from DLLs (optional, requires MSVC toolchain) ---
+Start-ProfilStage "strip"
+Write-Host "== Stripping debug symbols from DLLs =="
+$_editbin = Get-Command editbin -ErrorAction SilentlyContinue
+if ($_editbin) {
+  $stripStart = Get-Date
+  $stripCount = 0
+  $stripSaved = 0
+  Get-ChildItem -Path $EnvDir -Recurse -Include "*.dll","*.pyd" -ErrorAction SilentlyContinue | ForEach-Object {
+    $origSize = $_.Length
+    & editbin /RELEASE $_.FullName 2>$null
+    if ($LASTEXITCODE -eq 0) {
+      $stripCount++
+      $stripSaved += ($origSize - $_.Length)
+    }
+    $global:LASTEXITCODE = 0
+  }
+  $stripEnd = Get-Date
+  $stripTime = ($stripEnd - $stripStart).TotalSeconds
+  $savedMB = [math]::Round($stripSaved / 1MB, 1)
+  Write-Host "[build_win_portable] Stripped $stripCount files, saved ${savedMB}MB in $([math]::Round($stripTime, 1))s"
+} else {
+  Write-Host "[build_win_portable] editbin not found — skipping DLL stripping (Windows DLLs are typically pre-stripped by MSVC)" -ForegroundColor Yellow
+}
+Stop-ProfilStage "strip"
+
 # --- Copy icon ---
 $IconSrc = Join-Path $PackDir "assets\icon.ico"
 if (Test-Path $IconSrc) {
