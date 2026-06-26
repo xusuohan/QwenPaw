@@ -20,25 +20,30 @@ from typing import Any, Callable, Dict, List, Optional
 
 import httpx
 
-from nio import (
-    AsyncClient,
-    AsyncClientConfig,
-    LoginResponse,
-    MatrixRoom,
-    MegolmEvent,
-    RoomEncryptedAudio,
-    RoomEncryptedFile,
-    RoomEncryptedImage,
-    RoomEncryptedVideo,
-    RoomMessageAudio,
-    RoomMessageFile,
-    RoomMessageImage,
-    RoomMessageText,
-    RoomMessageVideo,
-    SyncResponse,
-    UploadResponse,
-)
-from nio.responses import JoinedMembersResponse, WhoamiResponse
+try:
+    from nio import (
+        AsyncClient,
+        AsyncClientConfig,
+        LoginResponse,
+        MatrixRoom,
+        MegolmEvent,
+        RoomEncryptedAudio,
+        RoomEncryptedFile,
+        RoomEncryptedImage,
+        RoomEncryptedVideo,
+        RoomMessageAudio,
+        RoomMessageFile,
+        RoomMessageImage,
+        RoomMessageText,
+        RoomMessageVideo,
+        SyncResponse,
+        UploadResponse,
+    )
+    from nio.responses import JoinedMembersResponse, WhoamiResponse
+
+    _MATRIX_AVAILABLE = True
+except ImportError:
+    _MATRIX_AVAILABLE = False
 
 from agentscope_runtime.engine.schemas.agent_schemas import (
     AudioContent,

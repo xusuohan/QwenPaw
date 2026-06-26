@@ -60,6 +60,7 @@ $DataDir = Join-Path $PortableRoot "data"
 New-Item -ItemType Directory -Force -Path $Dist | Out-Null
 
 # --- Build wheel ---
+Start-ProfilStage "wheel_build"
 Write-Host "== Building wheel (includes console frontend) =="
 $VersionFile = Join-Path $RepoRoot "src\qwenpaw\__version__.py"
 $CurrentVersion = ""
@@ -90,6 +91,7 @@ if ($RunWheelBuild) {
   & $WheelBuildScript
   if ($LASTEXITCODE -ne 0) { throw "wheel_build.ps1 failed with exit code $LASTEXITCODE" }
 }
+Stop-ProfilStage "wheel_build"
 
 # --- Build conda-packed env ---
 Write-Host "== Building conda-packed env =="
@@ -103,15 +105,34 @@ if (-not $PythonCmd) {
 }
 Write-Host "[build_win_portable] Using Python: $PythonCmd"
 
-& $PythonCmd $PackDir\build_common.py --output $Archive --format zip
+# --- Profiling ---
+$script:ProfilingState = Join-Path $Dist ".build_profiler_state.json"
+$script:ProfilingOutput = Join-Path $Dist "build_profiling.json"
+
+function Start-ProfilStage($name) {
+  & $PythonCmd "$PackDir\build_profiler.py" start $name --state-file $script:ProfilingState --platform "Windows-$([System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture)" --python-version "3.10"
+}
+
+function Stop-ProfilStage($name) {
+  & $PythonCmd "$PackDir\build_profiler.py" end $name --state-file $script:ProfilingState
+}
+
+function Save-ProfilReport() {
+  & $PythonCmd "$PackDir\build_profiler.py" save $script:ProfilingOutput --state-file $script:ProfilingState
+}
+
+Start-ProfilStage "conda_pack_env"
+& $PythonCmd $PackDir\build_common.py --output $Archive --format zip --profiling-output (Join-Path $Dist "build_common_profiling.json")
 if ($LASTEXITCODE -ne 0) {
   throw "build_common.py failed with exit code $LASTEXITCODE"
 }
 if (-not (Test-Path $Archive)) {
   throw "Archive not created: $Archive"
 }
+Stop-ProfilStage "conda_pack_env"
 
 # --- Unpack into portable directory ---
+Start-ProfilStage "unpack"
 # Extract directly into env/ subdir to avoid a post-extraction Move-Item.
 # Move-Item fails on Windows when individual file paths exceed MAX_PATH (260)
 # — common in site-packages with deeply nested __pycache__/*.pyc files.
@@ -141,6 +162,7 @@ if ($_7z) {
 $extractEnd = Get-Date
 $extractTime = ($extractEnd - $extractStart).TotalSeconds
 Write-Host "[build_win_portable] Extraction done in $([math]::Round($extractTime, 1))s"
+Stop-ProfilStage "unpack"
 
 # If the archive has a top-level wrapper directory (rare for conda-pack
 # output, but possible), python.exe will be nested one level deeper than
@@ -182,6 +204,7 @@ Write-Host "[build_win_portable] python.exe found: $PythonExePath"
 # at runtime, so site-packages discovery works without path rewriting.
 
 # --- Pre-compile bytecode ---
+Start-ProfilStage "compileall"
 Write-Host "== Pre-compiling Python bytecode for faster startup =="
 # Skip large indirect-dependency packages. Criteria: project source does not
 # directly `import` them, OR compileall has previously failed on their files
@@ -217,6 +240,7 @@ Write-Host "[build_win_portable] Compiled $pycCount .pyc files in $([math]::Roun
 if ($compileExit -ne 0) {
   Write-Host "[build_win_portable] WARN: compileall exit $compileExit (some files skipped), continuing..." -ForegroundColor Yellow
 }
+Stop-ProfilStage "compileall"
 
 # --- Copy icon ---
 $IconSrc = Join-Path $PackDir "assets\icon.ico"
@@ -250,6 +274,7 @@ if (-not $CertifiRel) {
 }
 
 # --- Create portable launchers ---
+Start-ProfilStage "platform_pack"
 
 # start.bat - main portable launcher
 $StartBat = Join-Path $WinDir "start.bat"
@@ -441,6 +466,34 @@ QwenPaw Portable
 "@ | Set-Content -Path $ReadmePath -Encoding UTF8
 
 Write-Host "[build_win_portable] README.txt created"
+Stop-ProfilStage "platform_pack"
+
+# --- Save profiling report ---
+Save-ProfilReport
+
+# --- Smoke test ---
+Write-Host "== Running smoke test =="
+$smokeStart = Get-Date
+try {
+  $smokeOut = & $PythonExePath -c "import qwenpaw; print(qwenpaw.__version__)" 2>&1
+  if ($LASTEXITCODE -eq 0) {
+    Write-Host "[build_win_portable] Smoke test PASSED: $smokeOut" -ForegroundColor Green
+  } else {
+    Write-Host "[build_win_portable] Smoke test FAILED (exit code $LASTEXITCODE)" -ForegroundColor Red
+    Write-Host "[build_win_portable] Output: $smokeOut" -ForegroundColor Red
+    # Collect diagnostics
+    $diagDir = Join-Path $Dist "diagnostics"
+    New-Item -ItemType Directory -Force -Path $diagDir | Out-Null
+    & $PythonExePath -c "import sys; print(sys.version)" 2>&1 | Out-File (Join-Path $diagDir "python_version.txt")
+    & $PythonExePath -m pip list 2>&1 | Out-File (Join-Path $diagDir "pip_list.txt")
+    $env:PATH | Out-File (Join-Path $diagDir "path.txt")
+    Write-Host "[build_win_portable] Diagnostics saved to $diagDir"
+  }
+} catch {
+  Write-Host "[build_win_portable] Smoke test EXCEPTION: $_" -ForegroundColor Red
+}
+$smokeEnd = Get-Date
+Write-Host "[build_win_portable] Smoke test took $([math]::Round(($smokeEnd - $smokeStart).TotalSeconds, 1))s"
 
 # --- Optional: Create ZIP ---
 if ($env:CREATE_ZIP -eq "1") {

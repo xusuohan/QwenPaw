@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-# pylint:disable=too-many-statements
+# pylint:disable=too-many-statements,too-many-branches
 """
 Create a temporary conda env, install QwenPaw from a wheel, run conda-pack.
 Used by build_macos.sh and build_win.ps1. Run from repo root.
@@ -16,6 +16,8 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+
+from build_profiler import BuildProfiler
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 ENV_PREFIX = "qwenpaw_pack_"
@@ -120,6 +122,20 @@ def _save_cached_env(env_hash: str, env_name: str) -> None:
     (cache_dir / env_hash).write_text(env_name)
 
 
+def _detect_platform() -> str:
+    """Detect current platform for profiling metadata."""
+    import platform as _platform
+    system = _platform.system()
+    machine = _platform.machine()
+    if system == "Darwin":
+        return f"macOS-{machine}"
+    elif system == "Linux":
+        return f"Linux-{machine}"
+    elif system == "Windows":
+        return f"Windows-{machine}"
+    return f"{system}-{machine}"
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Conda-pack QwenPaw (temp env).",
@@ -158,6 +174,11 @@ def main() -> int:
             "Cached to .cache/conda_unpack_wheels/ for later reinstall."
         ),
     )
+    parser.add_argument(
+        "--profiling-output",
+        default=None,
+        help="Path to write build profiling JSON report",
+    )
     args = parser.parse_args()
     out_path = Path(args.output).resolve()
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -166,10 +187,13 @@ def main() -> int:
 
     conda = _conda_exe()
 
-    # Check for cached environment
+    # Check for cached environment.
+    # Only require the conda env to exist (not the archive, since
+    # build_portable.sh deletes dist/ artifacts after each build).
+    # When cached, we skip env creation and only re-run conda-pack.
     env_hash = _compute_env_hash(wheel_path, args.python)
     cached_env = _find_cached_env(env_hash)
-    use_cache = cached_env is not None and out_path.exists()
+    use_cache = cached_env is not None
 
     if use_cache:
         assert cached_env is not None
@@ -180,107 +204,119 @@ def main() -> int:
             f"{ENV_PREFIX}{''.join(random.choices(string.ascii_lowercase, k=8))}"
         )
 
+    profiler = BuildProfiler(
+        platform=_detect_platform(),
+        python_version=args.python,
+        wheel_hash=env_hash,
+        cache_hit=use_cache,
+    )
+
     try:
         if not use_cache:
-            create_env = {**os.environ, "CONDA_SOLVER": "libmamba"}
-            _run(
-                [
-                    conda,
-                    "create",
-                    "-n",
-                    env_name,
-                    f"python={args.python}",
-                    "pip",
-                    "-y",
-                    "--no-default-packages",
-                ],
-                env=create_env,
-            )
+            with profiler.stage("conda_create"):
+                create_env = {**os.environ, "CONDA_SOLVER": "libmamba"}
+                _run(
+                    [
+                        conda,
+                        "create",
+                        "-n",
+                        env_name,
+                        f"python={args.python}",
+                        "pip",
+                        "-y",
+                        "--no-default-packages",
+                    ],
+                    env=create_env,
+                )
             # Install qwenpaw with all dependencies
             # Scope CMAKE_ARGS to this specific command to avoid affecting other
             # CMake-based packages. Only set if we need to compile from source.
-            install_env = {}
-            # Prevent pip from installing to user site-packages
-            install_env["PYTHONNOUSERSITE"] = "1"
+            with profiler.stage("pip_install"):
+                install_env = {}
+                # Prevent pip from installing to user site-packages
+                install_env["PYTHONNOUSERSITE"] = "1"
 
-            pip_cmd = [
-                conda,
-                "run",
-                "-n",
-                env_name,
-                "python",
-                "-m",
-                "pip",
-                "install",
-                "--retries",
-                "3",
-                "--timeout",
-                "120",
-                f"qwenpaw @ {wheel_uri}",
-            ]
-            _max_retries = 2
-            for _attempt in range(_max_retries + 1):
-                try:
-                    _run(pip_cmd, env=install_env)
-                    break
-                except subprocess.CalledProcessError as e:
-                    if _attempt < _max_retries:
-                        print(
-                            f"pip install failed (attempt {_attempt + 1}/"
-                            f"{_max_retries + 1}), retrying..."
-                        )
-                        time.sleep(5)
-                    else:
-                        print(
-                            f"ERROR: pip install failed after "
-                            f"{_max_retries + 1} attempts. "
-                            f"Exit code: {e.returncode}",
-                            file=sys.stderr,
-                        )
-                        raise
-            print("Verifying certifi is installed (required for SSL)...")
-            _run(
-                [
+                pip_cmd = [
                     conda,
                     "run",
                     "-n",
                     env_name,
                     "python",
-                    "-c",
-                    "import certifi; print(f'certifi OK: {certifi.where()}')",
-                ],
-            )
+                    "-m",
+                    "pip",
+                    "install",
+                    "--retries",
+                    "3",
+                    "--timeout",
+                    "120",
+                    f"qwenpaw[full] @ {wheel_uri}",
+                ]
+                _max_retries = 2
+                for _attempt in range(_max_retries + 1):
+                    try:
+                        _run(pip_cmd, env=install_env)
+                        break
+                    except subprocess.CalledProcessError as e:
+                        if _attempt < _max_retries:
+                            print(
+                                f"pip install failed (attempt {_attempt + 1}/"
+                                f"{_max_retries + 1}), retrying..."
+                            )
+                            time.sleep(5)
+                        else:
+                            print(
+                                f"ERROR: pip install failed after "
+                                f"{_max_retries + 1} attempts. "
+                                f"Exit code: {e.returncode}",
+                                file=sys.stderr,
+                            )
+                            raise
+            with profiler.stage("verify_certifi"):
+                print("Verifying certifi is installed (required for SSL)...")
+                _run(
+                    [
+                        conda,
+                        "run",
+                        "-n",
+                        env_name,
+                        "python",
+                        "-c",
+                        "import certifi; print(f'certifi OK: {certifi.where()}')",
+                    ],
+                )
             # Remove large transitive deps never imported by qwenpaw
-            _unused_packages = ["kubernetes", "sympy"]
-            print(f"Removing unused packages: {_unused_packages}")
-            _run(
-                [
-                    conda,
-                    "run",
-                    "-n",
-                    env_name,
-                    "python",
-                    "-m",
-                    "pip",
-                    "uninstall",
-                    *_unused_packages,
-                    "-y",
-                ],
-            )
+            with profiler.stage("pip_uninstall"):
+                _unused_packages = ["kubernetes", "sympy"]
+                print(f"Removing unused packages: {_unused_packages}")
+                _run(
+                    [
+                        conda,
+                        "run",
+                        "-n",
+                        env_name,
+                        "python",
+                        "-m",
+                        "pip",
+                        "uninstall",
+                        *_unused_packages,
+                        "-y",
+                    ],
+                )
             # Clean pip cache to reduce packed size
-            _run(
-                [
-                    conda,
-                    "run",
-                    "-n",
-                    env_name,
-                    "python",
-                    "-m",
-                    "pip",
-                    "cache",
-                    "purge",
-                ],
-            )
+            with profiler.stage("pip_cache_purge"):
+                _run(
+                    [
+                        conda,
+                        "run",
+                        "-n",
+                        env_name,
+                        "python",
+                        "-m",
+                        "pip",
+                        "cache",
+                        "purge",
+                    ],
+                )
             if args.cache_wheels:
                 # Store outside dist/ to avoid being deleted by wheel_build cleanup
                 wheels_cache = REPO_ROOT / ".cache" / "conda_unpack_wheels"
@@ -306,50 +342,55 @@ def main() -> int:
                 )
             # pip may uninstall/reinstall files owned by conda while resolving
             # qwenpaw[full]. Restore conda-managed packaging tools before packing.
-            _run(
-                [
-                    conda,
-                    "run",
-                    "-n",
-                    env_name,
-                    conda,
-                    "install",
-                    "-y",
-                    "--force-reinstall",
-                    "pip",
-                    "setuptools",
-                    "wheel",
-                    "conda-pack",
-                ],
-            )
+            with profiler.stage("conda_fix"):
+                _run(
+                    [
+                        conda,
+                        "run",
+                        "-n",
+                        env_name,
+                        conda,
+                        "install",
+                        "-y",
+                        "--force-reinstall",
+                        "pip",
+                        "setuptools",
+                        "wheel",
+                        "conda-pack",
+                    ],
+                )
             # Save to cache for future reuse
             _save_cached_env(env_hash, env_name)
-        if out_path.exists():
-            out_path.unlink()
-        pack_cmd = [
-            conda,
-            "run",
-            "-n",
-            env_name,
-            "conda-pack",
-            "-n",
-            env_name,
-            "-o",
-            str(out_path),
-            "-f",
-        ]
-        if args.format != "infer":
-            pack_cmd.extend(["--format", args.format])
-        pack_cmd.extend(["--compress-level", "4"])
-        _run(pack_cmd)
-        print(f"Packed to {out_path}")
+        with profiler.stage("conda_pack"):
+            if out_path.exists():
+                out_path.unlink()
+            pack_cmd = [
+                conda,
+                "run",
+                "-n",
+                env_name,
+                "conda-pack",
+                "-n",
+                env_name,
+                "-o",
+                str(out_path),
+                "-f",
+            ]
+            if args.format != "infer":
+                pack_cmd.extend(["--format", args.format])
+            pack_cmd.extend(["--compress-level", "4"])
+            _run(pack_cmd)
+            print(f"Packed to {out_path}")
     finally:
-        # Only remove env if not cached
-        if not use_cache:
-            try:
-                _run([conda, "env", "remove", "-n", env_name, "-y"])
-            except Exception as e:
-                print(f"Warning: Failed to remove temp env {env_name}: {e}")
+        # Save profiling report even when a build stage fails
+        if args.profiling_output:
+            profiler.save(args.profiling_output)
+            print(f"Profiling report saved to {args.profiling_output}")
+        # Intentionally NOT deleting the conda env here.
+        # The env is cached for future builds (keyed by wheel content hash).
+        # Deleting it would break the cache chain — every build would be a
+        # cache miss, negating the 3-9 min savings on subsequent builds.
+        # To clean up old cached envs: conda env remove -n <env_name> -y
     return 0
 
 

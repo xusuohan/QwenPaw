@@ -9,28 +9,20 @@ dependencies = [
     "agentscope-runtime==1.1.4",
     "httpx>=0.27.0",
     "packaging>=24.0",
-    "discord-py>=2.3",
     "dingtalk-stream>=0.24.3",
     "alibabacloud-dingtalk>=2.2.42",
     "alibabacloud-tea-openapi>=0.4.4",
     "uvicorn>=0.40.0",
     "apscheduler>=3.11.2,<4",
-    "playwright>=1.49.0",
     "questionary>=2.1.1",
     "mss>=9.0.0",
     "reme-ai==0.3.1.8",
-    "transformers>=4.30.0",
     "python-dotenv>=1.0.0",
     "python-socks>=2.5.3",
-    "onnxruntime<1.24",
-    "lark-oapi>=1.5.3",
-    "python-telegram-bot>=20.0",
-    "twilio>=9.10.2",
     "pywebview>=4.0",
     "aiofiles>=24.1.0",
     "paho-mqtt>=2.0.0",
     "wecom-aibot-python-sdk==1.0.2",
-    "matrix-nio>=0.24.0",
     "shortuuid>=1.0.0",
     "google-genai>=1.67.0",
     "tzdata>=2024.1",
@@ -39,7 +31,6 @@ dependencies = [
     "pyyaml>=6.0",
     "json-repair>=0.30.0",
     "segno>=1.6.6",
-    "modelscope>=1.35.0",
     "huggingface_hub>=0.20.0",
     "pillow>=10.0.0",
     "agent-client-protocol>=0.9.0",
@@ -94,8 +85,24 @@ local = [
 whisper = [
     "openai-whisper>=20231117",
 ]
+ml = [
+    "onnxruntime<1.24",
+    "transformers>=4.30.0",
+]
+browser = [
+    "playwright>=1.49.0",
+]
+channels = [
+    "discord-py>=2.3",
+    "python-telegram-bot>=20.0",
+    "lark-oapi>=1.5.3",
+    "matrix-nio>=0.24.0",
+    "twilio>=9.10.2",
+]
 full = [
-    "qwenpaw[local,whisper]",
+    "qwenpaw[local,ml,browser,channels]",
+    # whisper excluded: requires numba→llvmlite which needs LLVM to build.
+    # Install separately: pip install openai-whisper
 ]
 sip = [
     "pyVoIP>=1.6.0",
