@@ -59,6 +59,22 @@ $DataDir = Join-Path $PortableRoot "data"
 
 New-Item -ItemType Directory -Force -Path $Dist | Out-Null
 
+# --- Profiling ---
+$script:ProfilingState = Join-Path $Dist ".build_profiler_state.json"
+$script:ProfilingOutput = Join-Path $Dist "build_profiling.json"
+
+function Start-ProfilStage($name) {
+  & $PythonCmd "$PackDir\build_profiler.py" start $name --state-file $script:ProfilingState --platform "Windows-$([System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture)" --python-version "3.10"
+}
+
+function Stop-ProfilStage($name) {
+  & $PythonCmd "$PackDir\build_profiler.py" end $name --state-file $script:ProfilingState
+}
+
+function Save-ProfilReport() {
+  & $PythonCmd "$PackDir\build_profiler.py" save $script:ProfilingOutput --state-file $script:ProfilingState
+}
+
 # --- Build wheel ---
 Start-ProfilStage "wheel_build"
 Write-Host "== Building wheel (includes console frontend) =="
@@ -104,22 +120,6 @@ if (-not $PythonCmd) {
   throw "Python not found."
 }
 Write-Host "[build_win_portable] Using Python: $PythonCmd"
-
-# --- Profiling ---
-$script:ProfilingState = Join-Path $Dist ".build_profiler_state.json"
-$script:ProfilingOutput = Join-Path $Dist "build_profiling.json"
-
-function Start-ProfilStage($name) {
-  & $PythonCmd "$PackDir\build_profiler.py" start $name --state-file $script:ProfilingState --platform "Windows-$([System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture)" --python-version "3.10"
-}
-
-function Stop-ProfilStage($name) {
-  & $PythonCmd "$PackDir\build_profiler.py" end $name --state-file $script:ProfilingState
-}
-
-function Save-ProfilReport() {
-  & $PythonCmd "$PackDir\build_profiler.py" save $script:ProfilingOutput --state-file $script:ProfilingState
-}
 
 Start-ProfilStage "conda_pack_env"
 & $PythonCmd $PackDir\build_common.py --output $Archive --format zip --profiling-output (Join-Path $Dist "build_common_profiling.json")
