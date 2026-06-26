@@ -15,7 +15,7 @@ PLATFORM_DEFS = [
 IMPORT_CHECKS = [
     "import qwenpaw",
     "from qwenpaw.__version__ import __version__",
-    "import qwenpaw.desktop",
+    "import qwenpaw.cli",
     "import qwenpaw.config",
 ]
 
