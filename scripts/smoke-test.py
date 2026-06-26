@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Standalone portable package smoke test. No third-party dependencies."""
 import argparse
+import os
 import re
 import subprocess
 import sys
@@ -35,13 +36,17 @@ def detect_python(portable_dir: Path) -> tuple[Path, str] | None:
     return None
 
 
-def run_check(python: Path, code: str) -> tuple[bool, str]:
+def run_check(python: Path, code: str, env: dict[str, str] | None = None) -> tuple[bool, str]:
     try:
         result = subprocess.run(
             [str(python), "-c", code],
             capture_output=True, text=True, timeout=30,
+            env=env,
         )
-        return result.returncode == 0, result.stdout.strip() + result.stderr.strip()
+        stdout = result.stdout.strip()
+        stderr = result.stderr.strip()
+        combined = "\n".join(filter(None, [stdout, stderr]))
+        return result.returncode == 0, combined
     except Exception as e:
         return False, str(e)
 
@@ -66,8 +71,22 @@ def smoke_test(portable_dir: Path, verbose: bool = False) -> bool:
     print(f"Platform: {platform}")
     print(f"Python:   {python}")
 
+    # Build an isolated env so import checks hit the portable Python only.
+    env = dict(os.environ)
+    env["PYTHONNOUSERSITE"] = "1"
+    if platform == "windows":
+        bin_dir = portable_dir / "windows" / "env"
+        scripts_dir = portable_dir / "windows" / "env" / "Scripts"
+        env["PATH"] = f"{bin_dir}{os.pathsep}{scripts_dir}{os.pathsep}{env.get('PATH', '')}"
+    elif platform == "macOS":
+        bin_dir = portable_dir / "macOS" / "env" / "bin"
+        env["PATH"] = f"{bin_dir}{os.pathsep}{env.get('PATH', '')}"
+    else:  # linux
+        bin_dir = portable_dir / "linux" / "env" / "bin"
+        env["PATH"] = f"{bin_dir}{os.pathsep}{env.get('PATH', '')}"
+
     for check in IMPORT_CHECKS:
-        ok, out = run_check(python, check)
+        ok, out = run_check(python, check, env=env)
         if not ok:
             print(f"FAIL: {check}")
             if verbose:
@@ -80,9 +99,15 @@ def smoke_test(portable_dir: Path, verbose: bool = False) -> bool:
             print(f"Diagnostics saved to {diag_dir}")
             return False
 
-    ok, version = run_check(python, "from qwenpaw.__version__ import __version__; print(__version__)")
+    ok, version = run_check(python, "from qwenpaw.__version__ import __version__; print(__version__)", env=env)
     if not ok or not SEMVER_RE.match(version):
         print(f"FAIL: Invalid version '{version}'")
+        diag_dir = portable_dir.parent / "diagnostics"
+        collect_diagnostics(python, diag_dir)
+        (diag_dir / "smoke_test_output.txt").write_text(
+            f"Failed: version check\n{version}", encoding="utf-8"
+        )
+        print(f"Diagnostics saved to {diag_dir}")
         return False
 
     print(f"Version:  {version}")
