@@ -874,6 +874,19 @@ PROVIDER_1Xm = OpenAIProvider(
     },
 )
 
+PROVIDER_AYLIYUN_API = OpenAIProvider(
+    id="aliyun-api",
+    name="Aliyun API",
+    base_url="https://dashscope.aliyuncs.com/apps/anthropic",
+    api_key_prefix="",
+    models=[],
+    freeze_url=True,
+    support_model_discovery=True,
+    default_headers={
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
+    },
+)
+
 
 PROVIDER_KIMI_CN = OpenAIProvider(
     id="kimi-cn",
@@ -1034,6 +1047,7 @@ class ProviderManager:  # pylint: disable=too-many-public-methods
     def _init_builtins(self):
         self._add_builtin(PROVIDER_OCTOKEN)
         self._add_builtin(PROVIDER_1Xm)
+        self._add_builtin(PROVIDER_AYLIYUN_API)
         self._add_builtin(PROVIDER_QWENPAW)
         self._add_builtin(PROVIDER_OLLAMA)
         self._add_builtin(PROVIDER_LMSTUDIO)
