@@ -487,6 +487,8 @@ try {
     & $PythonExePath -c "import sys; print(sys.version)" 2>&1 | Out-File (Join-Path $diagDir "python_version.txt")
     & $PythonExePath -m pip list 2>&1 | Out-File (Join-Path $diagDir "pip_list.txt")
     $env:PATH | Out-File (Join-Path $diagDir "path.txt")
+    # Save full smoke test output for diagnosis
+    $smokeOut | Out-File (Join-Path $diagDir "smoke_test_output.txt")
     Write-Host "[build_win_portable] Diagnostics saved to $diagDir"
   }
 } catch {
