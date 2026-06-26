@@ -475,7 +475,7 @@ Save-ProfilReport
 Write-Host "== Running smoke test =="
 $smokeStart = Get-Date
 try {
-  $smokeOut = & $PythonExePath -c "import qwenpaw; print(qwenpaw.__version__)" 2>&1
+  $smokeOut = & $PythonExePath -c "from qwenpaw.__version__ import __version__; print(__version__)" 2>&1
   if ($LASTEXITCODE -eq 0) {
     Write-Host "[build_win_portable] Smoke test PASSED: $smokeOut" -ForegroundColor Green
   } else {
