@@ -73,6 +73,7 @@ class BuildProfiler:
         the :meth:`stage` context manager.
         """
         self._global_start_is_wall = True
+        self._global_start = time.time()
         self._stages.append({
             "name": name,
             "start_ts": time.time(),

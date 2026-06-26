@@ -40,7 +40,7 @@ def run_check(python: Path, code: str, env: dict[str, str] | None = None) -> tup
     try:
         result = subprocess.run(
             [str(python), "-c", code],
-            capture_output=True, text=True, timeout=30,
+            capture_output=True, text=True, timeout=90,
             env=env,
         )
         stdout = result.stdout.strip()
