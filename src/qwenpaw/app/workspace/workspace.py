@@ -11,11 +11,10 @@ Each Workspace represents a standalone agent workspace with its own:
 All existing single-agent components are reused without modification.
 """
 import logging
-from pathlib import Path
-from typing import Optional
+from typing import ClassVar, Optional
 
 from qwenpaw.config.timezone import normalize_tz
-from qwenpaw.config.utils import load_config
+from qwenpaw.config.utils import load_config, resolve_workspace_path
 
 from .service_manager import ServiceDescriptor, ServiceManager
 from .service_factories import (
@@ -48,6 +47,10 @@ class Workspace:
     All components use existing single-agent code without modification.
     """
 
+    # Workspace paths that have already run weixin→wechat migration
+    # this process.  ClassVar so all instances share the set (§3.5).
+    _weixin_migrated_workspaces: ClassVar[set[str]] = set()
+
     def __init__(self, agent_id: str, workspace_dir: str):
         """Initialize agent instance.
 
@@ -56,7 +59,7 @@ class Workspace:
             workspace_dir: Path to agent's workspace directory
         """
         self.agent_id = agent_id
-        self.workspace_dir = Path(workspace_dir).expanduser()
+        self.workspace_dir = resolve_workspace_path(workspace_dir)
         self.workspace_dir.mkdir(parents=True, exist_ok=True)
 
         # Service manager (unified component management)
@@ -395,7 +398,15 @@ class Workspace:
 
         Each step is guarded so a failure logs a warning instead of
         blocking startup; affected files stay in their legacy state.
+
+        Per-workspace once: after a successful run, the workspace path
+        is recorded in ``_weixin_migrated_workspaces`` and subsequent
+        calls return immediately (§3.5 optimisation).
         """
+        ws_key = str(self.workspace_dir)
+        if ws_key in self._weixin_migrated_workspaces:
+            return
+
         from ..crons.repo.json_repo import migrate_legacy_weixin_jobs_file
         from ..runner.repo.json_repo import migrate_legacy_weixin_chats_file
         from ..runner.session import migrate_legacy_weixin_session_files
@@ -434,6 +445,8 @@ class Workspace:
                 self.agent_id,
                 exc,
             )
+
+        self._weixin_migrated_workspaces.add(ws_key)
 
     async def stop(self, final: bool = True):
         """Stop agent instance and clean up all resources.

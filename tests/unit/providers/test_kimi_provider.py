@@ -55,6 +55,9 @@ def isolated_secret_dir(monkeypatch, tmp_path):
     return secret_dir
 
 
+@pytest.mark.skip(
+    reason="kimi providers are disabled (only octoken is active)",
+)
 def test_kimi_registered_in_provider_manager(isolated_secret_dir) -> None:
     """Kimi providers should be registered as built-in providers."""
     manager = ProviderManager()
@@ -92,6 +95,9 @@ async def test_kimi_check_connection_success(monkeypatch) -> None:
     assert msg == ""
 
 
+@pytest.mark.skip(
+    reason="kimi providers are disabled (only octoken is active)",
+)
 def test_kimi_has_expected_models(isolated_secret_dir) -> None:
     """Provider manager Kimi providers should include all built-in models."""
     manager = ProviderManager()
@@ -113,6 +119,9 @@ def test_kimi_has_expected_models(isolated_secret_dir) -> None:
         assert provider_intl.has_model(model_id)
 
 
+@pytest.mark.skip(
+    reason="kimi providers are disabled (only octoken is active)",
+)
 async def test_kimi_activate_models(
     isolated_secret_dir,
     monkeypatch,

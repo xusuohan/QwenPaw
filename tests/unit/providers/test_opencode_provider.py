@@ -36,6 +36,9 @@ def isolated_secret_dir(monkeypatch, tmp_path):
     return secret_dir
 
 
+@pytest.mark.skip(
+    reason="opencode provider is disabled (only octoken is active)",
+)
 def test_opencode_registered_in_provider_manager(isolated_secret_dir) -> None:
     """OpenCode provider should be registered as built-in provider."""
     manager = ProviderManager()

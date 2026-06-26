@@ -5,6 +5,7 @@ Handles migration from legacy single-agent config to new multi-agent structure.
 """
 import json
 import logging
+import os
 import shutil
 from pathlib import Path
 
@@ -26,7 +27,7 @@ from ..constant import (
     LEGACY_QA_AGENT_ID,
     WORKING_DIR,
 )
-from ..config.utils import load_config, save_config
+from ..config.utils import load_config, resolve_workspace_path, save_config
 
 logger = logging.getLogger(__name__)
 
@@ -101,7 +102,7 @@ def _do_migrate_legacy_workspace() -> bool:
     if "default" in config.agents.profiles:
         agent_ref = config.agents.profiles["default"]
         if isinstance(agent_ref, AgentProfileRef):
-            workspace_dir = Path(agent_ref.workspace_dir).expanduser()
+            workspace_dir = resolve_workspace_path(agent_ref.workspace_dir)
             agent_config_path = workspace_dir / "agent.json"
             if agent_config_path.exists():
                 logger.debug(
@@ -126,7 +127,7 @@ def _do_migrate_legacy_workspace() -> bool:
         id="default",
         name="Default Agent",
         description="Default QwenPaw agent (migrated from legacy config)",
-        workspace_dir=str(default_workspace),
+        workspace_dir="workspaces/default",
         channels=config.channels if hasattr(config, "channels") else None,
         mcp=config.mcp if hasattr(config, "mcp") else None,
         heartbeat=(
@@ -198,7 +199,7 @@ def _do_migrate_legacy_workspace() -> bool:
         profiles={
             "default": AgentProfileRef(
                 id="default",
-                workspace_dir=str(default_workspace),
+                workspace_dir=str(WORKING_DIR / "workspaces/default"),
             ),
         },
         # Preserve legacy fields with values from migrated agent config
@@ -449,7 +450,7 @@ def _do_migrate_legacy_skills() -> bool:
     seen_workspaces: set[str] = set()
     for profile in config.agents.profiles.values():
         _register_workspace(
-            Path(profile.workspace_dir).expanduser(),
+            resolve_workspace_path(profile.workspace_dir),
             workspace_dirs,
             seen_workspaces,
         )
@@ -665,7 +666,7 @@ def _do_ensure_default_agent() -> None:
     # Get or determine default workspace path
     if "default" in config.agents.profiles:
         agent_ref = config.agents.profiles["default"]
-        default_workspace = Path(agent_ref.workspace_dir).expanduser()
+        default_workspace = resolve_workspace_path(agent_ref.workspace_dir)
         agent_existed = True
     else:
         default_workspace = Path(
@@ -693,7 +694,7 @@ def _do_ensure_default_agent() -> None:
         # Add default agent reference to config
         config.agents.profiles["default"] = AgentProfileRef(
             id="default",
-            workspace_dir=str(default_workspace),
+            workspace_dir=str(WORKING_DIR / "workspaces/default"),
         )
 
         # Set as active if no active agent
@@ -726,7 +727,7 @@ def _other_agent_owns_workspace(
     for aid, ref in profiles.items():
         if aid == builtin_id:
             continue
-        other = Path(ref.workspace_dir).expanduser()
+        other = resolve_workspace_path(ref.workspace_dir)
         try:
             other_res = other.resolve()
         except OSError:
@@ -829,7 +830,7 @@ def _do_ensure_qa_agent() -> None:
 
     if qa_id in config.agents.profiles:
         agent_ref = config.agents.profiles[qa_id]
-        qa_workspace = Path(agent_ref.workspace_dir).expanduser()
+        qa_workspace = resolve_workspace_path(agent_ref.workspace_dir)
         agent_existed = True
     else:
         qa_workspace = Path(
@@ -877,7 +878,7 @@ def _do_ensure_qa_agent() -> None:
 
     config.agents.profiles[qa_id] = AgentProfileRef(
         id=qa_id,
-        workspace_dir=str(qa_workspace),
+        workspace_dir=str(WORKING_DIR / f"workspaces/{qa_id}"),
     )
     _apply_legacy_qa_disable_for_migration(config)
     save_config(config)
@@ -886,3 +887,87 @@ def _do_ensure_qa_agent() -> None:
         "Created builtin QA agent with workspace: %s",
         qa_workspace,
     )
+
+
+# ---------------------------------------------------------------------------
+# Migration stamp (§3.2)
+# ---------------------------------------------------------------------------
+# Skips redundant migration scans on every cold start.  A single stamp
+# read replaces 3× load_config() + ~10 stat calls.
+
+_STAMP_FILENAME = ".migration_stamp"
+
+
+def _get_current_version() -> str:
+    """Return the current package version string."""
+    from ..__version__ import __version__
+
+    return __version__
+
+
+def _migration_stamp_enabled() -> bool:
+    """Check QWENPAW_PERF_MIGRATION_STAMP flag (default on).
+
+    Disable via ``QWENPAW_PERF_MIGRATION_STAMP`` set to one of
+    ``{0, false, no, off}`` (case-insensitive).
+    """
+    raw = os.environ.get("QWENPAW_PERF_MIGRATION_STAMP")
+    if raw is not None and raw.lower() in {"0", "false", "no", "off"}:
+        return False
+    return True
+
+
+def _should_run_migrations() -> bool:
+    """True if migrations should run; False if stamp matches current version.
+
+    Safe defaults: missing stamp, corrupt JSON, missing ``version`` key,
+    or disabled flag all return True (run migrations).
+    """
+    if not _migration_stamp_enabled():
+        return True
+    stamp_path = WORKING_DIR / _STAMP_FILENAME
+    try:
+        data = json.loads(stamp_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return True
+    stamp_version = data.get("version")
+    if stamp_version is None:
+        return True
+    return stamp_version != _get_current_version()
+
+
+def _write_migration_stamp() -> None:
+    """Write migration stamp with current version and timestamp.
+
+    Uses atomic write (tmp + fsync + replace) for exFAT safety.
+    """
+    from datetime import datetime, timezone
+
+    from ..utils.atomic_io import write_json_atomic
+
+    stamp_path = WORKING_DIR / _STAMP_FILENAME
+    write_json_atomic(
+        stamp_path,
+        {
+            "version": _get_current_version(),
+            "ts": datetime.now(timezone.utc).isoformat(),
+        },
+    )
+
+
+def run_migrations() -> None:
+    """Run startup migrations with stamp-based skip.
+
+    Legacy migrations (workspace + skills) are gated behind the stamp:
+    if the stamp version matches the current package version, they are
+    skipped entirely.  ``ensure_default_agent_exists`` and
+    ``ensure_qa_agent_exists`` always run — they are cheap safety nets
+    (load_config + a few stat calls) that recreate missing agents.
+    """
+    if _should_run_migrations():
+        migrate_legacy_workspace_to_default_agent()
+        migrate_legacy_skills_to_skill_pool()
+        _write_migration_stamp()
+
+    ensure_default_agent_exists()
+    ensure_qa_agent_exists()

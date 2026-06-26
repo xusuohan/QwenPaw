@@ -27,6 +27,7 @@ from ..constant import (
     WORKING_DIR,
     EnvVarLoader,
 )
+from ..utils.atomic_io import write_json_atomic
 from .config import (
     Config,
     HeartbeatConfig,
@@ -49,40 +50,158 @@ _agent_config_cache: dict[str, tuple[Any, float]] = {}
 _agent_config_lock = threading.Lock()
 
 
-def _normalize_working_dir_bound_paths(data: object) -> object:
-    """Normalize legacy ~/.copaw-bound paths to current WORKING_DIR.
+def resolve_workspace_path(path_str: str) -> Path:
+    """Resolve a workspace_dir value to an absolute Path.
 
-    This keeps QWENPAW_WORKING_DIR effective even if user config files contain
-    older hard-coded paths like "~/.copaw/media" or
-    "/Users/x/.copaw/workspaces/...".
-    Only rewrites known working-dir-bound keys.
+    - Relative paths: resolve against WORKING_DIR
+    - Absolute paths: expanduser() as-is (backward compat)
     """
-    legacy_root_tilde = "~/.copaw"
-    legacy_root_abs = str(Path(legacy_root_tilde).expanduser().resolve())
-    new_root_abs = str(WORKING_DIR)
+    p = Path(path_str).expanduser()
+    if not p.is_absolute():
+        return WORKING_DIR / p
+    return p
 
-    def _rewrite_path_value(v: object) -> object:
-        if not isinstance(v, str) or not v:
+
+def rewrite_stale_paths_on_disk(config_path: Optional[Path] = None) -> bool:
+    """Rewrite stale WORKING_DIR-bound paths in config.json to current paths.
+
+    Detects absolute paths that contain known WORKING_DIR subdirectory markers
+    (workspaces/, media/) but have a different prefix (from another machine),
+    and rewrites them to the current WORKING_DIR.
+
+    Returns True if any changes were written to disk.
+    """
+    if config_path is None:
+        config_path = get_config_path()
+    if not config_path.is_file():
+        return False
+
+    try:
+        with open(config_path, "r", encoding="utf-8") as f:
+            raw = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        logger.error(
+            "Failed to read config %s for stale-path rewrite",
+            config_path,
+        )
+        return False
+
+    modified = False
+    _WORKING_DIR_MARKERS = ("workspaces", "media")
+    new_root = str(WORKING_DIR)
+
+    def _rewrite(v: object) -> object:
+        nonlocal modified
+        if not isinstance(v, str) or not v or v.startswith(new_root):
             return v
-        if v.startswith(legacy_root_tilde):
-            return new_root_abs + v[len(legacy_root_tilde) :]
-        if v.startswith(legacy_root_abs):
-            return new_root_abs + v[len(legacy_root_abs) :]
+        for marker in _WORKING_DIR_MARKERS:
+            for sep in ("/", "\\"):
+                needle = sep + marker + sep
+                idx = v.rfind(needle)
+                if idx >= 0:
+                    suffix = v[idx + 1 :].replace("\\", "/")
+                    new_val = str(WORKING_DIR / suffix)
+                    if new_val != v:
+                        modified = True
+                        return new_val
+                    return v
+                needle_end = sep + marker
+                if v.endswith(needle_end):
+                    new_val = str(WORKING_DIR / marker)
+                    if new_val != v:
+                        modified = True
+                        return new_val
+                    return v
         return v
 
     def _walk(obj: object, key: str | None = None) -> object:
         if isinstance(obj, dict):
-            out: dict = {}
-            for k, v in obj.items():
-                out[k] = _walk(v, str(k))
-            return out
+            return {k: _walk(v, str(k)) for k, v in obj.items()}
         if isinstance(obj, list):
             return [_walk(x, key) for x in obj]
         if key in {"workspace_dir", "media_dir"}:
-            return _rewrite_path_value(obj)
+            return _rewrite(obj)
         return obj
 
-    return _walk(data, None)
+    fixed = _walk(raw)
+    if modified:
+        try:
+            with open(config_path, "w", encoding="utf-8") as f:
+                json.dump(fixed, f, indent=2, ensure_ascii=False)
+        except OSError as exc:
+            logger.error(
+                "Failed to write stale-path rewrite to %s: %s",
+                config_path,
+                exc,
+            )
+            return False
+    return modified
+
+
+def rewrite_stale_agent_json_on_disk() -> int:
+    """Rewrite stale paths in all ``workspaces/*/agent.json`` files.
+
+    Scans each workspace under ``WORKING_DIR/workspaces/`` for an
+    ``agent.json`` and applies the same stale-path rewrite logic as
+    :func:`rewrite_stale_paths_on_disk`.
+
+    Returns the number of files modified.
+    """
+    _WORKING_DIR_MARKERS = ("workspaces", "media")
+    new_root = str(WORKING_DIR)
+    workspaces_dir = WORKING_DIR / "workspaces"
+    if not workspaces_dir.is_dir():
+        return 0
+
+    def _rewrite(v: object) -> object:
+        if not isinstance(v, str) or not v or v.startswith(new_root):
+            return v
+        for marker in _WORKING_DIR_MARKERS:
+            for sep in ("/", "\\"):
+                needle = sep + marker + sep
+                idx = v.rfind(needle)
+                if idx >= 0:
+                    suffix = v[idx + 1 :].replace("\\", "/")
+                    return str(WORKING_DIR / suffix)
+                needle_end = sep + marker
+                if v.endswith(needle_end):
+                    return str(WORKING_DIR / marker)
+        return v
+
+    def _walk(obj: object, key: str | None = None) -> object:
+        if isinstance(obj, dict):
+            return {k: _walk(v, str(k)) for k, v in obj.items()}
+        if isinstance(obj, list):
+            return [_walk(x, key) for x in obj]
+        if key in {"workspace_dir", "media_dir"}:
+            return _rewrite(obj)
+        return obj
+
+    count = 0
+    for agent_json in sorted(workspaces_dir.glob("*/agent.json")):
+        try:
+            with open(agent_json, "r", encoding="utf-8") as f:
+                raw = json.load(f)
+        except (OSError, json.JSONDecodeError):
+            logger.error(
+                "Failed to read %s for stale-path rewrite",
+                agent_json,
+            )
+            continue
+
+        fixed = _walk(raw)
+        if fixed != raw:
+            try:
+                with open(agent_json, "w", encoding="utf-8") as f:
+                    json.dump(fixed, f, indent=2, ensure_ascii=False)
+                count += 1
+            except OSError as exc:
+                logger.error(
+                    "Failed to write stale-path rewrite to %s: %s",
+                    agent_json,
+                    exc,
+                )
+    return count
 
 
 def _discover_system_chromium_path() -> Optional[str]:
@@ -550,7 +669,6 @@ def _load_and_validate_config(
     data: dict,
 ) -> Config:
     """Load and validate config data, handling validation errors."""
-    data = _normalize_working_dir_bound_paths(data)
     # Backward compat: top-level last_api_host / last_api_port -> last_api
     if "last_api_host" in data or "last_api_port" in data:
         la = data.setdefault("last_api", {})
@@ -644,7 +762,6 @@ def strict_validate_config_file(
     if data is None:
         return False, f"unreadable or invalid JSON — {config_path}"
 
-    data = _normalize_working_dir_bound_paths(data)
     if "last_api_host" in data or "last_api_port" in data:
         la = data.setdefault("last_api", {})
         if "host" not in la and "last_api_host" in data:
@@ -671,13 +788,10 @@ def save_config(config: Config, config_path: Optional[Path] = None) -> None:
     if config_path is None:
         config_path = get_config_path()
     config_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(config_path, "w", encoding="utf-8") as file:
-        json.dump(
-            config.model_dump(mode="json", by_alias=True),
-            file,
-            indent=2,
-            ensure_ascii=False,
-        )
+    write_json_atomic(
+        config_path,
+        config.model_dump(mode="json", by_alias=True),
+    )
 
     # Invalidate cache after saving
     with _config_lock:

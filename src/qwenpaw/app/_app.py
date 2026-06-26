@@ -33,9 +33,12 @@ from ..backup._utils.safe_swap import cleanup_startup_restore_artifacts
 from ..utils.logging import (
     setup_logger,
     add_project_file_handler,
-    LOG_FILE_PATH,
+    stop_queue_listeners,
+    LOG_BACKEND_PATH,
 )
 from ..utils.system_info import summarize_python_environment
+from ..utils.atomic_io import cleanup_orphan_tmps
+from ..utils.background_tasks import BackgroundTaskRunner
 from .auth import AuthMiddleware, auto_register_from_env
 from .routers import router as api_router, create_agent_scoped_router
 from .routers.agent_scoped import AgentContextMiddleware
@@ -45,12 +48,7 @@ from ..envs import load_envs_into_environ
 from ..providers.provider_manager import ProviderManager
 from ..local_models.manager import LocalModelManager
 from .multi_agent_manager import MultiAgentManager
-from .migration import (
-    migrate_legacy_workspace_to_default_agent,
-    migrate_legacy_skills_to_skill_pool,
-    ensure_default_agent_exists,
-    ensure_qa_agent_exists,
-)
+from .migration import run_migrations
 from .channels.registry import register_custom_channel_routes
 
 # Apply log level on load so reload child process gets same level as CLI.
@@ -64,9 +62,26 @@ mimetypes.add_type("application/javascript", ".mjs")
 mimetypes.add_type("text/css", ".css")
 mimetypes.add_type("application/wasm", ".wasm")
 
-# Load persisted env vars into os.environ at module import time
-# so they are available before the lifespan starts.
-load_envs_into_environ()
+
+# §3.3: load_envs_into_environ is called at package import time by
+# qwenpaw/__init__.py:43 — BEFORE constant.py is first imported, so all
+# 26+ module-level EnvVarLoader constants see persisted values.
+# The _app.py module-level call was REDUNDANT (overwrite=False → no-op).
+# We now call it once more in lifespan as a safety net for edge cases
+# (e.g. uvicorn --reload spawning a fresh child without __init__.py).
+
+
+def _load_envs_defer_enabled() -> bool:
+    """Return True when §3.3 env-loading defer is active (default: on)."""
+    val = (
+        os.environ.get(
+            "QWENPAW_PERF_LOAD_ENVS_DEFER",
+            "1",
+        )
+        .strip()
+        .lower()
+    )
+    return val not in ("0", "false", "no", "off")
 
 
 # Dynamic runner that selects the correct workspace runner based on request
@@ -222,7 +237,14 @@ async def lifespan(  # pylint: disable=too-many-statements,too-many-branches
     app: FastAPI,
 ):
     startup_start_time = time.time()
-    add_project_file_handler(LOG_FILE_PATH)
+    add_project_file_handler(LOG_BACKEND_PATH)
+
+    # §3.3: Safety-net env load.  __init__.py:43 already loaded envs
+    # before constant.py was imported; this second call (overwrite=False)
+    # is normally a no-op but guards against edge cases where
+    # __init__.py's call was skipped or failed.
+    if _load_envs_defer_enabled():
+        load_envs_into_environ()
 
     # ================================================================
     # Phase 1: Fast synchronous setup (target < 100ms)
@@ -241,7 +263,19 @@ async def lifespan(  # pylint: disable=too-many-statements,too-many-branches
         logger.error(message, exc_info=True)
         raise RuntimeError(f"{message} Original error: {exc}") from exc
 
+    # Reclaim orphaned .tmp.<pid> files left by a crashed atomic write.
+    # Recursive (**/) so subdirs holding write targets (local_models,
+    # .secret, crons/runner repos) are covered too.
+    try:
+        cleanup_orphan_tmps(WORKING_DIR, pattern="**/*.tmp.*")
+    except Exception:
+        logger.debug("startup orphan tmp cleanup failed", exc_info=True)
+
     auto_register_from_env()
+
+    # Fire-and-forget runner for deferrable startup IO (telemetry
+    # upload, ...).
+    _bg_runner = BackgroundTaskRunner()
 
     try:
         from ..utils.telemetry import (
@@ -253,7 +287,26 @@ async def lifespan(  # pylint: disable=too-many-statements,too-many-branches
         if not is_telemetry_opted_out(
             WORKING_DIR,
         ) and not has_telemetry_been_collected(WORKING_DIR):
-            collect_and_upload_telemetry(WORKING_DIR)
+            # Defer the expensive collection (GPU subprocess probes +
+            # network upload) off the startup path. The opt-out / already
+            # collected checks above stay synchronous (cheap marker read).
+            async def _telemetry_task() -> None:
+                try:
+                    await asyncio.to_thread(
+                        collect_and_upload_telemetry,
+                        WORKING_DIR,
+                    )
+                except Exception:
+                    logger.debug(
+                        "Background telemetry upload failed",
+                        exc_info=True,
+                    )
+
+            _bg_runner.spawn_after(
+                2.0,
+                _telemetry_task,
+                name="telemetry",
+            )
     except Exception:
         logger.debug(
             "Telemetry collection skipped due to error",
@@ -261,10 +314,7 @@ async def lifespan(  # pylint: disable=too-many-statements,too-many-branches
         )
 
     logger.debug("Checking for legacy config migration...")
-    migrate_legacy_workspace_to_default_agent()
-    ensure_default_agent_exists()
-    migrate_legacy_skills_to_skill_pool()
-    ensure_qa_agent_exists()
+    run_migrations()
 
     # Create core managers (instant — no I/O)
     logger.debug("Initializing MultiAgentManager...")
@@ -471,6 +521,12 @@ async def lifespan(  # pylint: disable=too-many-statements,too-many-branches
             with suppress(asyncio.CancelledError):
                 await _bg_task
 
+        # Drain / cancel deferred background tasks (e.g. telemetry upload).
+        try:
+            await _bg_runner.shutdown()
+        except Exception as e:
+            logger.error(f"Error stopping background task runner: {e}")
+
         # ==================== Execute Shutdown Hooks ====================
         plugin_registry = getattr(app.state, "plugin_registry", None)
         if plugin_registry is not None:
@@ -532,6 +588,11 @@ async def lifespan(  # pylint: disable=too-many-statements,too-many-branches
             logger.error(f"Error stopping TokenUsageManager: {e}")
 
         logger.info("Application shutdown complete")
+
+        # §5.3: Flush queued log records and stop listener threads.
+        # Must run AFTER the final log.info above so that message is
+        # drained by the listener before it exits.
+        stop_queue_listeners()
 
 
 app = FastAPI(
@@ -669,9 +730,21 @@ if os.path.isdir(_CONSOLE_STATIC_DIR):
 
     _assets_dir = _console_path / "assets"
     if _assets_dir.is_dir():
+
+        class _CachedStaticFiles(StaticFiles):
+            """Immutable cache headers for Vite-hashed static assets."""
+
+            async def get_response(self, path, scope):
+                response = await super().get_response(path, scope)
+                if response.status_code == 200:
+                    response.headers[
+                        "Cache-Control"
+                    ] = "public, max-age=31536000, immutable"
+                return response
+
         app.mount(
             "/assets",
-            StaticFiles(directory=str(_assets_dir)),
+            _CachedStaticFiles(directory=str(_assets_dir)),
             name="assets",
         )
 

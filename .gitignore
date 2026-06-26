@@ -116,3 +116,4 @@ src/.hypothesis/
 # Worktrees
 .worktrees/
 .gstack/
+.npm-cache/_update-notifier-last-checked

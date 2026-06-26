@@ -75,13 +75,34 @@ QwenPaw Portable
 - 需要在目标平台分别构建对应版本
 README
 
-# 清理本次构建的中间产物，保留已有的便携版目录
+# 将 profiling 报告移入便携版目录（清理前）
+for _pf in "${DIST}/build_profiling.json" "${DIST}/build_common_profiling.json"; do
+  if [[ -f "${_pf}" ]]; then
+    mv "${_pf}" "${PORTABLE_DIR}/"
+    echo "== Moved $(basename "${_pf}") into portable dir =="
+  fi
+done
+
+# 清理本次构建的中间产物，保留已有的便携版目录和缓存文件
 echo "== Cleaning build artifacts =="
-rm -f "${DIST}"/qwenpaw-env*.tar.gz
-rm -f "${DIST}"/*.whl
-rm -f "${DIST}"/.DS_Store
-# 清理便携版目录中的 .DS_Store
+# 删除 dist/ 下的中间产物，但保留：
+# - QwenPaw-Portable_* 便携版目录
+# - qwenpaw-*.whl wheel 文件（供下次构建复用，避免重复 npm build）
+# - qwenpaw-*.tar.gz sdist（wheel_build 产出）
+find "${DIST}" -maxdepth 1 \
+  ! -name "$(basename "${DIST}")" \
+  ! -name "QwenPaw-Portable_*" \
+  ! -name "qwenpaw-*.whl" \
+  ! -name "qwenpaw-*.tar.gz" \
+  -exec rm -rf {} + 2>/dev/null || true
+# 清理便携版目录中的 .DS_Store 和 __pycache__
 find "${PORTABLE_DIR}" -name ".DS_Store" -delete 2>/dev/null || true
+find "${PORTABLE_DIR}" -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+# 清除扩展属性（避免复制到 exFAT U 盘后 com.apple.provenance 阻止删除/覆盖技能）
+if command -v xattr &>/dev/null; then
+  echo "== Stripping extended attributes =="
+  xattr -cr "${PORTABLE_DIR}" 2>/dev/null || true
+fi
 echo "== dist/ cleaned =="
 
 echo "== Portable version built at ${PORTABLE_DIR} =="

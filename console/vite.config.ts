@@ -116,14 +116,27 @@ export default defineConfig(({ mode }) => {
             ) {
               return "react-vendor";
             }
-            // Ant Design + AgentScope design system (merged to avoid circular deps)
+            // Ant Design
             if (
               id.includes("node_modules/antd/") ||
               id.includes("node_modules/antd-style/") ||
-              id.includes("node_modules/@ant-design/") ||
-              id.includes("node_modules/@agentscope-ai/")
+              id.includes("node_modules/@ant-design/")
             ) {
-              return "ui-vendor";
+              return "antd-vendor";
+            }
+            // Lodash (both CJS and ESM variants)
+            // Must be in a dedicated chunk to prevent Rollup from deduplicating
+            // lodash (CJS) and lodash-es (ESM) across different consumer chunks,
+            // which breaks MapCache's prototype-based method assignment.
+            if (
+              id.includes("node_modules/lodash/") ||
+              id.includes("node_modules/lodash-es/")
+            ) {
+              return "lodash-vendor";
+            }
+            // AgentScope design system
+            if (id.includes("node_modules/@agentscope-ai/")) {
+              return "agentscope-vendor";
             }
             // i18n
             if (
@@ -148,6 +161,10 @@ export default defineConfig(({ mode }) => {
             // Drag and drop
             if (id.includes("node_modules/@dnd-kit/")) {
               return "dnd-vendor";
+            }
+            // Mermaid diagram rendering
+            if (id.includes("node_modules/mermaid/")) {
+              return "mermaid-vendor";
             }
             // Utilities (dayjs, zustand, ahooks, etc.)
             if (

@@ -37,7 +37,6 @@ from ..config.config import (
     load_agent_config,
 )
 from ..config.utils import (
-    _normalize_working_dir_bound_paths,
     _read_config_data,
     get_config_path,
     get_jobs_path,
@@ -54,13 +53,14 @@ from ..constant import (
     WORKING_DIR,
     EnvVarLoader,
 )
-from ..utils.logging import LOG_FILE_BASENAME
+from ..utils.logging import LOG_BACKEND_PATH
 from ..utils.system_info import summarize_python_environment
 from ..providers.provider import Provider
 
 
-# Log file opened on app startup (see ``qwenpaw.app._app`` lifespan).
-APP_LOG_BASENAME = LOG_FILE_BASENAME
+# §5.3 dual log files: backend subprocess + desktop launcher each write
+# to independent files. Doctor checks the backend log (primary output);
+# both files live in the same WORKING_DIR so writability is equivalent.
 
 # Built-in local llama.cpp provider id; legacy configs may still use
 # copaw-local.
@@ -88,8 +88,8 @@ def _resolve_existing_path_anchor(path: Path) -> Path | None:
 
 
 def check_app_log_writable() -> tuple[bool, str]:
-    """Check log-path writability."""
-    log_path = WORKING_DIR / APP_LOG_BASENAME
+    """Check log-path writability (backend log; desktop shares the dir)."""
+    log_path = LOG_BACKEND_PATH
     if log_path.exists():
         if not log_path.is_file():
             return (
@@ -766,10 +766,6 @@ def _read_workspace_agent_json(ref: AgentProfileRef) -> dict[str, Any] | None:
         return None
     if not isinstance(data, dict):
         return None
-    try:
-        data = _normalize_working_dir_bound_paths(data)
-    except Exception:  # pylint: disable=broad-exception-caught
-        pass
     return data
 
 

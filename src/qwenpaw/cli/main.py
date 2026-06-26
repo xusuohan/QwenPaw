@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import sys
 import time
 
@@ -34,11 +35,6 @@ def _record(label: str, elapsed: float) -> None:
 
 
 # Timed imports below: order and placement are intentional (E402/C0413).
-_t = time.perf_counter()
-from ..config.utils import read_last_api  # noqa: E402
-
-_record("..config.utils", time.perf_counter() - _t)
-
 _t = time.perf_counter()
 from ..__version__ import __version__  # noqa: E402
 
@@ -143,6 +139,11 @@ class LazyGroup(click.Group):
         ),
         "task": ("qwenpaw.cli.task_cmd", "task_cmd", ".task_cmd"),
         "doctor": ("qwenpaw.cli.doctor_cmd", "doctor_cmd", ".doctor_cmd"),
+        "fix-paths": (
+            "qwenpaw.cli.fix_paths_cmd",
+            "fix_paths_cmd",
+            ".fix_paths_cmd",
+        ),
     },
 )
 @click.version_option(version=__version__, prog_name="QwenPaw")
@@ -156,7 +157,34 @@ class LazyGroup(click.Group):
 @click.pass_context
 def cli(ctx: click.Context, host: str | None, port: int | None) -> None:
     """QwenPaw CLI."""
+    # Warm OS page cache for bytecode/C-ext on slow USB media. Best-effort
+    # daemon thread; toggle via QWENPAW_PERF_IMPORT_PREFETCH (default on).
+    if os.environ.get("QWENPAW_PERF_IMPORT_PREFETCH", "1").lower() not in (
+        "0",
+        "false",
+        "no",
+    ):
+        try:
+            cap_env = os.environ.get("QWENPAW_PERF_PREFETCH_CAP_MB")
+            cap_mb: int | None = None
+            if cap_env:
+                try:
+                    cap_mb = int(cap_env)
+                except ValueError:
+                    logger.debug(
+                        "invalid QWENPAW_PERF_PREFETCH_CAP_MB=%r;"
+                        " using default",
+                        cap_env,
+                    )
+            from ..utils.import_prefetch import start_import_prefetch
+
+            start_import_prefetch(cap_mb=cap_mb)
+        except Exception:
+            logger.debug("import prefetch start skipped", exc_info=True)
+
     # default from last run if not provided
+    from ..config.utils import read_last_api
+
     last = read_last_api()
     if host is None or port is None:
         if last:

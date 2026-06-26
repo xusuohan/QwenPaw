@@ -2,6 +2,7 @@
 # pylint: disable=too-many-nested-blocks,too-many-branches
 # pylint: disable=too-many-return-statements,too-many-statements
 """Context manager for agents with compaction support."""
+import asyncio
 import logging
 import os
 import sys
@@ -32,6 +33,7 @@ from ..utils import get_token_counter
 from ..utils.estimate_token_counter import EstimatedTokenCounter
 from ...config.config import load_agent_config
 from ...constant import TRUNCATION_NOTICE_MARKER
+from ...utils.atomic_io import write_bytes_atomic
 
 if TYPE_CHECKING:
     from ..react_agent import QwenPawAgent
@@ -130,7 +132,7 @@ class LightContextManager(BaseContextManager):
             )
         return deleted
 
-    def _truncate_tool_result(
+    async def _truncate_tool_result(
         self,
         content: str,
         max_bytes: int,
@@ -175,9 +177,12 @@ class LightContextManager(BaseContextManager):
         tool_result_dir = Path(self.working_dir) / trc.tool_results_cache
 
         try:
-            tool_result_dir.mkdir(parents=True, exist_ok=True)
             fp = tool_result_dir / f"{uuid.uuid4().hex}.txt"
-            fp.write_text(content, encoding=encoding)
+            await asyncio.to_thread(
+                write_bytes_atomic,
+                fp,
+                content.encode(encoding),
+            )
             saved_path = str(fp)
         except OSError as e:
             logger.exception(f"Failed to save tool result to file: {e}")
@@ -198,7 +203,7 @@ class LightContextManager(BaseContextManager):
             encoding=encoding,
         )
 
-    def _prune_output(
+    async def _prune_output(
         self,
         output: str | list[dict],
         max_bytes: int,
@@ -215,11 +220,15 @@ class LightContextManager(BaseContextManager):
             Pruned output.
         """
         if isinstance(output, str):
-            return self._truncate_tool_result(output, max_bytes, encoding)
+            return await self._truncate_tool_result(
+                output,
+                max_bytes,
+                encoding,
+            )
         if isinstance(output, list):
             for block in output:
                 if isinstance(block, dict) and block.get("type") == "text":
-                    block["text"] = self._truncate_tool_result(
+                    block["text"] = await self._truncate_tool_result(
                         block.get("text", ""),
                         max_bytes,
                         encoding,
@@ -327,7 +336,7 @@ class LightContextManager(BaseContextManager):
                         if tool_id in exempt_tool_ids
                         else max_bytes
                     )
-                    block["output"] = self._prune_output(
+                    block["output"] = await self._prune_output(
                         output,
                         effective_max_bytes,
                     )

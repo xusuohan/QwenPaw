@@ -203,7 +203,7 @@ class TestAddFileHandler:
         assert len(logger.handlers) == initial_count
 
     def test_adds_file_handler(self, tmp_path):
-        """S级: File handler is added to logger."""
+        """S级: File handler is added to logger (direct mode, no queue)."""
         log_path = tmp_path / "qwenpaw.log"
 
         # Clear handlers first
@@ -212,7 +212,8 @@ class TestAddFileHandler:
         logger.handlers = []
 
         try:
-            add_project_file_handler(log_path)
+            with patch.dict("os.environ", {"QWENPAW_PERF_LOG_QUEUE": "0"}):
+                add_project_file_handler(log_path)
             has_file_handler = any(
                 isinstance(
                     h,

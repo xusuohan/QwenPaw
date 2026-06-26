@@ -12,6 +12,8 @@ import uuid
 from pathlib import Path
 from typing import Any, Callable
 
+from .atomic_io import locked_json_update
+
 logger = logging.getLogger(__name__)
 
 TELEMETRY_ENDPOINT = (
@@ -250,35 +252,30 @@ def mark_telemetry_collected(
     """
     marker_file = working_dir / TELEMETRY_MARKER_FILE
     current = _get_current_version()
-    try:
+
+    def _merge(old: Any) -> dict[str, Any]:
         collected_versions: list[str] = []
         prev_opted_out = False
-        if marker_file.exists():
-            try:
-                old_data = json.loads(
-                    marker_file.read_text(encoding="utf-8"),
-                )
-                collected_versions = old_data.get("collected_versions", [])
-                prev_opted_out = old_data.get("opted_out", False) is True
-                # Migrate from v1.1 single-version format
-                if not collected_versions:
-                    old_ver = old_data.get("qwenpaw_version", "")
-                    if old_ver:
-                        collected_versions = [old_ver]
-            except Exception:
-                pass
-
+        if isinstance(old, dict):
+            collected_versions = list(old.get("collected_versions") or [])
+            prev_opted_out = old.get("opted_out", False) is True
+            # Migrate from v1.1 single-version format
+            if not collected_versions:
+                old_ver = old.get("qwenpaw_version", "")
+                if old_ver:
+                    collected_versions = [old_ver]
         if current not in collected_versions:
             collected_versions.append(current)
-
-        marker_data = {
+        return {
             "collected_at": time.time(),
             "qwenpaw_version": current,
             "collected_versions": collected_versions,
             "opted_out": opted_out or prev_opted_out,
             "version": "1.3",
         }
-        marker_file.write_text(json.dumps(marker_data), encoding="utf-8")
+
+    try:
+        locked_json_update(marker_file, _merge, default={})
     except Exception as e:
         logger.debug("Failed to write telemetry marker: %s", e)
 

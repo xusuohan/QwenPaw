@@ -10,9 +10,18 @@ PACK_DIR="$(cd "$(dirname "$0")" && pwd)"
 # 检测构建环境
 source "${PACK_DIR}/check_env.sh"
 DIST="${DIST:-dist}"
+# --- Profiling ---
+PROFILING_STATE="${DIST}/.build_profiler_state.json"
+PROFILING_OUTPUT="${DIST}/build_profiling.json"
+_profiler() {
+  python3 "${PACK_DIR}/build_profiler.py" "$@" --state-file "${PROFILING_STATE}"
+}
 ARCHIVE="${DIST}/qwenpaw-env.tar.gz"
 APP_NAME="QwenPaw"
 APP_DIR="${DIST}/${APP_NAME}.app"
+
+ARCH="$(uname -m)"
+_profiler start wheel_build --platform "macOS-${ARCH}" --python-version "3.10"
 
 echo "== Building wheel (includes console frontend) =="
 # Skip wheel_build if dist already has a wheel for current version
@@ -42,8 +51,17 @@ else
   bash scripts/wheel_build.sh
 fi
 
+_profiler end wheel_build
+
+_profiler start conda_pack_env
+
 echo "== Building conda-packed env =="
-python "${PACK_DIR}/build_common.py" --output "$ARCHIVE" --format tar.gz
+python3 "${PACK_DIR}/build_common.py" --output "$ARCHIVE" --format tar.gz \
+  --profiling-output "${DIST}/build_common_profiling.json"
+
+_profiler end conda_pack_env
+
+_profiler start unpack
 
 echo "== Building .app bundle =="
 rm -rf "$APP_DIR"
@@ -54,8 +72,25 @@ mkdir -p "${APP_DIR}/Contents/Resources"
 mkdir -p "${APP_DIR}/Contents/Resources/env"
 tar -xzf "$ARCHIVE" -C "${APP_DIR}/Contents/Resources/env" --strip-components=0
 
+_profiler end unpack
+
+_profiler start strip
+echo "== Stripping debug symbols and removing static libs =="
+ENV_DIR="${APP_DIR}/Contents/Resources/env"
+find "${ENV_DIR}" -name "*.so" -exec strip -x {} \; 2>/dev/null || true
+find "${ENV_DIR}" -name "*.dylib" -exec strip -x {} \; 2>/dev/null || true
+find "${ENV_DIR}" -name "*.a" -delete 2>/dev/null || true
+find "${ENV_DIR}" -name "*.h" -delete 2>/dev/null || true
+_profiler end strip
+
+_profiler start compileall
+
 echo "== Pre-compiling Python bytecode =="
-"${APP_DIR}/Contents/Resources/env/bin/python" -m compileall -q -j 0 "${APP_DIR}/Contents/Resources/env" >/dev/null 2>&1 || true
+"${APP_DIR}/Contents/Resources/env/bin/python" -m compileall -q -j 0 --invalidation-mode checked-hash "${APP_DIR}/Contents/Resources/env" >/dev/null 2>&1 || true
+
+_profiler end compileall
+
+_profiler start platform_pack
 
 # Launcher: force packed env; when no TTY log to ~/.qwenpaw/desktop.log (no exec so we see errors)
 cat > "${APP_DIR}/Contents/MacOS/${APP_NAME}" << 'LAUNCHER'
@@ -116,6 +151,9 @@ CONFIG_FILE="$QWENPAW_WORKING_DIR/config.json"
 if [ ! -f "$CONFIG_FILE" ]; then
   "$ENV_DIR/bin/python" -u -m qwenpaw init --defaults --accept-security
 fi
+
+# 重写陈旧路径（跨设备迁移时修正 config.json 中的绝对路径）
+"$ENV_DIR/bin/python" -u -m qwenpaw fix-paths
 
 # 非 TTY 模式：设置日志重定向
 if [ ! -t 2 ]; then
@@ -199,6 +237,12 @@ cat > "${APP_DIR}/Contents/Info.plist" << INFOPLIST
 INFOPLIST
 
 echo "== Built ${APP_DIR} =="
+
+_profiler end platform_pack
+
+_profiler save "${PROFILING_OUTPUT}"
+echo "== Profiling report: ${PROFILING_OUTPUT} =="
+
 # Optional: create zip for distribution (set CREATE_ZIP=1)
 if [[ -n "${CREATE_ZIP}" ]]; then
   ZIP_NAME="${DIST}/QwenPaw-${VERSION}-macOS.zip"

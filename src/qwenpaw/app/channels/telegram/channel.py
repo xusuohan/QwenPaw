@@ -12,16 +12,21 @@ import uuid
 from pathlib import Path
 from typing import Any, Dict, Optional, Union
 
-from telegram import BotCommand
-from telegram.constants import ParseMode
-from telegram.error import (
-    BadRequest,
-    Forbidden,
-    InvalidToken,
-    NetworkError,
-    RetryAfter,
-    TimedOut,
-)
+try:
+    from telegram import BotCommand
+    from telegram.constants import ParseMode
+    from telegram.error import (
+        BadRequest,
+        Forbidden,
+        InvalidToken,
+        NetworkError,
+        RetryAfter,
+        TimedOut,
+    )
+
+    _TELEGRAM_AVAILABLE = True
+except ImportError:
+    _TELEGRAM_AVAILABLE = False
 
 from agentscope_runtime.engine.schemas.agent_schemas import (
     TextContent,

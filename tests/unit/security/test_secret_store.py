@@ -173,3 +173,49 @@ class TestMasterKeyGeneration:
             key = mod._get_master_key()
 
         assert key == bytes.fromhex(key_hex)
+
+    def test_write_key_file_uses_atomic_write(
+        self,
+        tmp_path: Path,
+        monkeypatch,
+    ):
+        """_write_key_file delegates to write_bytes_atomic (crash-safe)."""
+        import qwenpaw.security.secret_store as mod
+
+        monkeypatch.setattr(mod, "_get_secret_dir", lambda: tmp_path)
+
+        key_hex = "bb" * 32
+        with patch(
+            "qwenpaw.utils.atomic_io.write_bytes_atomic",
+        ) as mock_atomic:
+            mod._write_key_file(key_hex)
+
+        mock_atomic.assert_called_once_with(
+            tmp_path / ".master_key",
+            key_hex.encode("utf-8"),
+        )
+
+    def test_write_key_file_content(self, tmp_path: Path, monkeypatch):
+        """Key file contains the hex-encoded key after write."""
+        import qwenpaw.security.secret_store as mod
+
+        monkeypatch.setattr(mod, "_get_secret_dir", lambda: tmp_path)
+
+        key_hex = "cc" * 32
+        mod._write_key_file(key_hex)
+
+        assert (tmp_path / ".master_key").read_text() == key_hex
+
+    def test_write_key_file_idempotent(self, tmp_path: Path, monkeypatch):
+        """Writing the same key twice produces the same result."""
+        import qwenpaw.security.secret_store as mod
+
+        monkeypatch.setattr(mod, "_get_secret_dir", lambda: tmp_path)
+
+        key_hex = "dd" * 32
+        mod._write_key_file(key_hex)
+        first = (tmp_path / ".master_key").read_text()
+        mod._write_key_file(key_hex)
+        second = (tmp_path / ".master_key").read_text()
+
+        assert first == second == key_hex

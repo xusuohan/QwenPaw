@@ -23,6 +23,7 @@ import json
 import logging
 import os
 import secrets
+import threading
 import time
 from typing import Optional
 
@@ -36,10 +37,28 @@ from ..security.secret_store import (
     encrypt_dict_fields,
     is_encrypted,
 )
+from ..utils.atomic_io import write_json_atomic
 
 logger = logging.getLogger(__name__)
 
 AUTH_FILE = SECRET_DIR / "auth.json"
+
+# Short-lived in-process cache for _load_auth_data(): avoids up to 3
+# reads+decrypts per authenticated request. Invalidated on every local
+# write (_save_auth_data). Cross-process revocation is seen within TTL
+# (~3s) — accepted per design.
+AUTH_DATA_CACHE_TTL = 3.0
+_auth_data_cache: dict | None = None
+_auth_data_cache_ts: float = 0.0
+_auth_data_cache_lock = threading.Lock()
+
+
+def invalidate_auth_cache() -> None:
+    """Drop the in-process auth-data cache (call after any auth write)."""
+    global _auth_data_cache
+    with _auth_data_cache_lock:
+        _auth_data_cache = None
+
 
 # Token validity: 7 days (default)
 TOKEN_EXPIRY_SECONDS = 7 * 24 * 3600
@@ -203,7 +222,7 @@ def verify_token(token: str) -> Optional[str]:
 # ---------------------------------------------------------------------------
 
 
-def _load_auth_data() -> dict:
+def _load_auth_data_from_disk() -> dict:
     """Load ``auth.json`` from ``SECRET_DIR``.
 
     Returns the parsed dict, or a sentinel with ``_auth_load_error``
@@ -241,6 +260,30 @@ def _load_auth_data() -> dict:
     return {}
 
 
+def _load_auth_data() -> dict:
+    """Return auth data with a short-lived in-process cache.
+
+    Delegates to :func:`_load_auth_data_from_disk` on a cache miss; serves
+    the cached dict within ``AUTH_DATA_CACHE_TTL`` seconds. The cache is
+    dropped by :func:`invalidate_auth_cache` (called from
+    :func:`_save_auth_data`) so local writes are visible immediately.
+    """
+    global _auth_data_cache, _auth_data_cache_ts
+    now = time.monotonic()
+    with _auth_data_cache_lock:
+        cached = _auth_data_cache
+        if (
+            cached is not None
+            and (now - _auth_data_cache_ts) < AUTH_DATA_CACHE_TTL
+        ):
+            return cached
+    data = _load_auth_data_from_disk()
+    with _auth_data_cache_lock:
+        _auth_data_cache = data
+        _auth_data_cache_ts = now
+    return data
+
+
 def _save_auth_data(data: dict) -> None:
     """Save ``auth.json`` to ``SECRET_DIR`` with restrictive permissions.
 
@@ -248,9 +291,10 @@ def _save_auth_data(data: dict) -> None:
     """
     _prepare_secret_parent(AUTH_FILE)
     encrypted_data = encrypt_dict_fields(data, AUTH_SECRET_FIELDS)
-    with open(AUTH_FILE, "w", encoding="utf-8") as f:
-        json.dump(encrypted_data, f, indent=2, ensure_ascii=False)
+    write_json_atomic(AUTH_FILE, encrypted_data)
+    # chmod is best-effort (no-op on exFAT); kept for non-exFAT defense.
     _chmod_best_effort(AUTH_FILE, 0o600)
+    invalidate_auth_cache()
 
 
 # ---------------------------------------------------------------------------

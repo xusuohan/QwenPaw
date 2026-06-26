@@ -226,14 +226,41 @@ def cleanup_startup_restore_artifacts() -> None:
             cleanup_stale_restore_artifacts(target)
 
 
+def _list_child_names(directory: Path) -> set[str]:
+    """Return names of direct children in *directory* via single scandir.
+
+    One ``os.scandir`` call replaces N individual ``path.exists()`` stat
+    calls — significant on exFAT where each stat is an expensive random IO.
+    Returns empty set if the directory does not exist or is inaccessible.
+    """
+    try:
+        return {entry.name for entry in os.scandir(directory)}
+    except OSError:
+        return set()
+
+
 def _cleanup_stale_restore_artifacts_locked(base_dir: Path) -> None:
     """Implementation of cleanup_stale_restore_artifacts (caller holds
-    lock)."""
-    tmp = base_dir.with_name(base_dir.name + _RESTORE_TMP_SUFFIX)
-    old = base_dir.with_name(base_dir.name + _RESTORE_OLD_SUFFIX)
+    lock).
+
+    Uses a single ``os.scandir`` on the parent directory to determine
+    which artifacts exist, replacing per-artifact ``.exists()`` stat
+    calls (§3.4 optimization).
+    """
+    tmp_name = base_dir.name + _RESTORE_TMP_SUFFIX
+    old_name = base_dir.name + _RESTORE_OLD_SUFFIX
+
+    # Single scandir replaces 5+ stat calls (§3.4).
+    parent_names = _list_child_names(base_dir.parent)
+    has_tmp = tmp_name in parent_names
+    has_old = old_name in parent_names
+    has_base = base_dir.name in parent_names
+
+    tmp = base_dir.with_name(tmp_name)
+    old = base_dir.with_name(old_name)
 
     # Scenario 1: original data saved in .restore_old; recover it first.
-    if old.exists() and not base_dir.exists():
+    if has_old and not has_base:
         try:
             old.rename(base_dir)
             logger.warning(
@@ -251,7 +278,7 @@ def _cleanup_stale_restore_artifacts_locked(base_dir: Path) -> None:
             return
 
     # Scenario 2: incomplete extraction.
-    if tmp.exists():
+    if has_tmp:
         try:
             shutil.rmtree(tmp)
             logger.warning(
@@ -267,7 +294,7 @@ def _cleanup_stale_restore_artifacts_locked(base_dir: Path) -> None:
             )
 
     # Scenario 3: interrupted cleanup.
-    if old.exists():
+    if has_old:
         try:
             shutil.rmtree(old)
             logger.warning(
@@ -284,7 +311,8 @@ def _cleanup_stale_restore_artifacts_locked(base_dir: Path) -> None:
 
     recover_mount_point_swap(
         base_dir,
-        base_dir.with_name(base_dir.name + _RESTORE_TMP_SUFFIX),
+        tmp,
+        child_names=_list_child_names(base_dir),
     )
 
 

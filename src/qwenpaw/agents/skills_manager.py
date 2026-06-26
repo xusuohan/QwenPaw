@@ -10,6 +10,8 @@ import logging
 import os
 import re
 import shutil
+import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -456,6 +458,40 @@ _IGNORED_SKILL_ARTIFACTS = {
 }
 
 
+def _safe_rmtree(path: Path) -> None:
+    """Remove a directory tree, with fallback for macOS exFAT issues.
+
+    On exFAT USB drives, ``shutil.rmtree()`` may fail when encountering
+    macOS resource-fork files (``._`` prefix) with corrupted Unicode names.
+    This function falls back to ``osascript`` (Finder) on macOS when the
+    standard approach fails.
+    """
+    try:
+        shutil.rmtree(path)
+        return
+    except (OSError, FileNotFoundError):
+        pass
+    # Fallback: use Finder on macOS (handles exFAT resource-fork quirks)
+    if sys.platform == "darwin":
+        try:
+            subprocess.run(
+                [
+                    "osascript",
+                    "-e",
+                    f'tell application "Finder" to delete '
+                    f'POSIX file "{path}"',
+                ],
+                check=True,
+                capture_output=True,
+                timeout=10,
+            )
+            return
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+            pass
+    # Last resort: ignore errors
+    shutil.rmtree(path, ignore_errors=True)
+
+
 def _copy_skill_dir(source: Path, target: Path) -> None:
     """Replace *target* with a copy of *source*.
 
@@ -464,7 +500,7 @@ def _copy_skill_dir(source: Path, target: Path) -> None:
     User-authored dotfiles are preserved.
     """
     if target.exists():
-        shutil.rmtree(target)
+        _safe_rmtree(target)
 
     def _ignore(_dir: str, names: list[str]) -> set[str]:
         return {name for name in names if name in _IGNORED_SKILL_ARTIFACTS}
@@ -1417,8 +1453,21 @@ def migrate_pool_builtin_language_fields() -> bool:
     )
 
 
+# Process-level once flag (§3.5).  After the first successful call,
+# subsequent calls skip all IO.  Single-instance (C2) means no cross-
+# process concern; threading.Lock on callers serialises the first call.
+_skill_pool_initialized: bool = False
+
+
 def ensure_skill_pool_initialized() -> bool:
-    """Ensure the local skill pool exists and built-ins are synced into it."""
+    """Ensure the local skill pool exists and built-ins are synced into it.
+
+    Idempotent within a process: after the first successful call,
+    subsequent calls return ``False`` immediately without any IO.
+    """
+    global _skill_pool_initialized
+    if _skill_pool_initialized:
+        return False
     pool_dir = get_skill_pool_dir()
     created = False
     if not pool_dir.exists():
@@ -1434,6 +1483,7 @@ def ensure_skill_pool_initialized() -> bool:
         import_builtin_skills()
     else:
         migrate_pool_builtin_language_fields()
+    _skill_pool_initialized = True
     return created
 
 
@@ -2555,7 +2605,7 @@ class SkillService:
             _rename_entry,
         )
         if old_dir.exists():
-            shutil.rmtree(old_dir)
+            _safe_rmtree(old_dir)
 
         return {
             "success": True,
@@ -2796,7 +2846,7 @@ class SkillService:
 
         skill_dir = get_workspace_skills_dir(self.workspace_dir) / skill_name
         if skill_dir.exists():
-            shutil.rmtree(skill_dir)
+            _safe_rmtree(skill_dir)
 
         def _update(payload: dict[str, Any]) -> None:
             payload.get("skills", {}).pop(skill_name, None)
@@ -3080,7 +3130,7 @@ class SkillPoolService:
 
         skill_dir = get_skill_pool_dir() / skill_name
         if skill_dir.exists():
-            shutil.rmtree(skill_dir)
+            _safe_rmtree(skill_dir)
 
         def _update(payload: dict[str, Any]) -> None:
             payload.get("skills", {}).pop(skill_name, None)
@@ -3313,7 +3363,7 @@ class SkillPoolService:
             _scan_skill_dir_or_raise(staged_dir, final_name)
             _copy_skill_dir(staged_dir, skill_dir)
         if old_skill_dir.exists():
-            shutil.rmtree(old_skill_dir)
+            _safe_rmtree(old_skill_dir)
 
         new_config = (
             config if config is not None else entry.get("config") or {}

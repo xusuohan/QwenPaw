@@ -19,6 +19,7 @@ from agentscope_runtime.engine.schemas.exception import (
 )
 
 from .timezone import detect_system_timezone
+from ..utils.atomic_io import write_json_atomic
 from ..constant import (
     HEARTBEAT_DEFAULT_EVERY,
     HEARTBEAT_DEFAULT_TARGET,
@@ -1093,7 +1094,7 @@ class AgentsConfig(BaseModel):
         default_factory=lambda: {
             "default": AgentProfileRef(
                 id="default",
-                workspace_dir=f"{WORKING_DIR}/workspaces/default",
+                workspace_dir=str(WORKING_DIR / "workspaces/default"),
             ),
         },
         description="Agent profile references (ID and workspace path only)",
@@ -1691,7 +1692,9 @@ def build_fallback_agent_profile_config(
         raise ValueError(f"Agent '{agent_id}' not found in config")
 
     agent_ref = config.agents.profiles[agent_id]
-    workspace_dir = Path(agent_ref.workspace_dir).expanduser()
+    from .utils import resolve_workspace_path
+
+    workspace_dir = resolve_workspace_path(agent_ref.workspace_dir)
     return AgentProfileConfig(
         id=agent_id,
         name=agent_id.title(),
@@ -1749,6 +1752,7 @@ def load_agent_config(agent_id: str) -> AgentProfileConfig:
     """
     from .utils import (
         load_config,
+        resolve_workspace_path,
         _agent_config_cache,
         _agent_config_lock,
     )
@@ -1762,7 +1766,7 @@ def load_agent_config(agent_id: str) -> AgentProfileConfig:
         )
 
     agent_ref = config.agents.profiles[agent_id]
-    workspace_dir = Path(agent_ref.workspace_dir).expanduser()
+    workspace_dir = resolve_workspace_path(agent_ref.workspace_dir)
     agent_config_path = workspace_dir / "agent.json"
 
     if not agent_config_path.exists():
@@ -1823,18 +1827,6 @@ def load_agent_config(agent_id: str) -> AgentProfileConfig:
             except OSError:
                 pass
 
-        # Normalize legacy ~/.copaw-bound paths to current WORKING_DIR.
-        # This keeps QWENPAW_WORKING_DIR effective even if existing agent.json
-        # contains older hard-coded paths like "~/.copaw/media".
-        # NOTE: this transform is applied in-memory only; it must not be
-        # persisted back to disk.
-        try:
-            from .utils import _normalize_working_dir_bound_paths
-
-            data = _normalize_working_dir_bound_paths(data)
-        except Exception:
-            pass
-
         agent_config = AgentProfileConfig(**data)
 
         # Cache the config with its mtime
@@ -1858,6 +1850,7 @@ def save_agent_config(
     """
     from .utils import (
         load_config,
+        resolve_workspace_path,
         _agent_config_cache,
         _agent_config_lock,
     )
@@ -1871,18 +1864,15 @@ def save_agent_config(
         )
 
     agent_ref = config.agents.profiles[agent_id]
-    workspace_dir = Path(agent_ref.workspace_dir).expanduser()
+    workspace_dir = resolve_workspace_path(agent_ref.workspace_dir)
     workspace_dir.mkdir(parents=True, exist_ok=True)
 
     agent_config_path = workspace_dir / "agent.json"
 
-    with open(agent_config_path, "w", encoding="utf-8") as f:
-        json.dump(
-            agent_config.model_dump(exclude_none=True),
-            f,
-            ensure_ascii=False,
-            indent=2,
-        )
+    write_json_atomic(
+        agent_config_path,
+        agent_config.model_dump(exclude_none=True),
+    )
 
     # Invalidate cache after saving
     with _agent_config_lock:
@@ -1896,7 +1886,7 @@ def migrate_legacy_config_to_multi_agent() -> bool:
     Returns:
         bool: True if migration was performed, False if already migrated
     """
-    from .utils import load_config, save_config
+    from .utils import load_config, resolve_workspace_path, save_config
 
     config = load_config()
 
@@ -1906,7 +1896,7 @@ def migrate_legacy_config_to_multi_agent() -> bool:
         # If it's already a AgentProfileRef, migration done
         if isinstance(agent_ref, AgentProfileRef):
             # Check if default agent config exists
-            workspace_dir = Path(agent_ref.workspace_dir).expanduser()
+            workspace_dir = resolve_workspace_path(agent_ref.workspace_dir)
             agent_config_path = workspace_dir / "agent.json"
             if agent_config_path.exists():
                 return False  # Already migrated
@@ -2000,7 +1990,7 @@ def migrate_legacy_config_to_multi_agent() -> bool:
         profiles={
             "default": AgentProfileRef(
                 id="default",
-                workspace_dir=str(default_workspace),
+                workspace_dir="workspaces/default",
             ),
         },
         # Preserve legacy fields with values from migrated agent config

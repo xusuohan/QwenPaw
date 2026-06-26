@@ -3,6 +3,7 @@
 # pylint:disable=too-many-branches,too-many-statements,consider-using-with
 from __future__ import annotations
 
+import atexit
 import logging
 import os
 import signal
@@ -18,7 +19,12 @@ from typing import Any
 import click
 
 from ..constant import LOG_LEVEL_ENV
-from ..utils.logging import setup_logger
+from ..utils.logging import (
+    add_project_file_handler,
+    setup_logger,
+    stop_queue_listeners,
+    LOG_DESKTOP_PATH,
+)
 
 try:
     import webview
@@ -415,9 +421,16 @@ def _sigterm_handler(signum, _frame):
     show_default=True,
     help="Log level for the app process.",
 )
+@click.option(
+    "--fix-paths",
+    is_flag=True,
+    default=False,
+    help="Rewrite stale absolute paths before starting (for portable builds).",
+)
 def desktop_cmd(
     host: str,
     log_level: str,
+    fix_paths: bool,
 ) -> None:
     """Run QwenPaw app on an auto-selected free port in a webview window.
 
@@ -428,6 +441,18 @@ def desktop_cmd(
     global _backend_proc, _win_job_handle  # noqa: PLW0603
     # Setup logger for desktop command (separate from backend subprocess)
     setup_logger(log_level)
+    # §5.3: Desktop process writes to its own log file (dual-file split).
+    add_project_file_handler(LOG_DESKTOP_PATH)
+    atexit.register(stop_queue_listeners)
+
+    if fix_paths:
+        from ..config.utils import (
+            rewrite_stale_agent_json_on_disk,
+            rewrite_stale_paths_on_disk,
+        )
+
+        rewrite_stale_paths_on_disk()
+        rewrite_stale_agent_json_on_disk()
 
     port = _find_free_port(host)
     url = f"http://{host}:{port}"
