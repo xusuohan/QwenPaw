@@ -474,25 +474,20 @@ Save-ProfilReport
 # --- Smoke test ---
 Write-Host "== Running smoke test =="
 $smokeStart = Get-Date
-try {
+$smokeScript = Join-Path $RepoRoot "scripts\smoke-test.py"
+if (Test-Path $smokeScript) {
+  & $PythonExePath $smokeScript --portable-dir $PortableRoot --verbose
+  if ($LASTEXITCODE -ne 0) {
+    Write-Host "[build_win_portable] Smoke test FAILED" -ForegroundColor Red
+  }
+} else {
+  Write-Host "[build_win_portable] WARN: smoke-test.py not found, running inline check" -ForegroundColor Yellow
   $smokeOut = & $PythonExePath -c "from qwenpaw.__version__ import __version__; print(__version__)" 2>&1
   if ($LASTEXITCODE -eq 0) {
     Write-Host "[build_win_portable] Smoke test PASSED: $smokeOut" -ForegroundColor Green
   } else {
     Write-Host "[build_win_portable] Smoke test FAILED (exit code $LASTEXITCODE)" -ForegroundColor Red
-    Write-Host "[build_win_portable] Output: $smokeOut" -ForegroundColor Red
-    # Collect diagnostics
-    $diagDir = Join-Path $Dist "diagnostics"
-    New-Item -ItemType Directory -Force -Path $diagDir | Out-Null
-    & $PythonExePath -c "import sys; print(sys.version)" 2>&1 | Out-File (Join-Path $diagDir "python_version.txt")
-    & $PythonExePath -m pip list 2>&1 | Out-File (Join-Path $diagDir "pip_list.txt")
-    $env:PATH | Out-File (Join-Path $diagDir "path.txt")
-    # Save full smoke test output for diagnosis
-    $smokeOut | Out-File (Join-Path $diagDir "smoke_test_output.txt")
-    Write-Host "[build_win_portable] Diagnostics saved to $diagDir"
   }
-} catch {
-  Write-Host "[build_win_portable] Smoke test EXCEPTION: $_" -ForegroundColor Red
 }
 $smokeEnd = Get-Date
 Write-Host "[build_win_portable] Smoke test took $([math]::Round(($smokeEnd - $smokeStart).TotalSeconds, 1))s"
