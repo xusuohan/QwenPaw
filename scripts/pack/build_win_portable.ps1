@@ -515,12 +515,16 @@ if ($env:CREATE_ZIP -eq "1") {
 
 # --- Clean intermediate artifacts (keep ALL QwenPaw-Portable_* directories) ---
 Write-Host "== Cleaning build artifacts =="
-# Remove everything in dist/ except historical portable packages.
-# This matches build_portable.sh: drops env.zip, wheels, sdists, temp dirs,
-# while preserving every QwenPaw-Portable_<timestamp>/ ever produced.
+# Remove everything in dist/ except historical portable packages and cache files.
+# This matches build_portable.sh: preserves QwenPaw-Portable_* dirs,
+# qwenpaw-*.whl, qwenpaw-*.tar.gz (cache chain), and profiling output.
 if (Test-Path $Dist) {
   Get-ChildItem -Path $Dist -ErrorAction SilentlyContinue | Where-Object {
-    $_.Name -notmatch '^QwenPaw-Portable_'
+    $_.Name -notmatch '^QwenPaw-Portable_' -and
+    $_.Name -notmatch '^qwenpaw-.*\.whl$' -and
+    $_.Name -notmatch '^qwenpaw-.*\.tar\.gz$' -and
+    $_.Name -ne 'build_profiling.json' -and
+    $_.Name -ne 'build_common_profiling.json'
   } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
 }
 # Strip .DS_Store droppings (cross-platform copy from macOS can leave these).
