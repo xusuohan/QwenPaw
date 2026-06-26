@@ -14,7 +14,7 @@ DIST="${DIST:-dist}"
 PROFILING_STATE="${DIST}/.build_profiler_state.json"
 PROFILING_OUTPUT="${DIST}/build_profiling.json"
 _profiler() {
-  python "${PACK_DIR}/build_profiler.py" "$@" --state-file "${PROFILING_STATE}"
+  python3 "${PACK_DIR}/build_profiler.py" "$@" --state-file "${PROFILING_STATE}"
 }
 ARCHIVE="${DIST}/qwenpaw-env.tar.gz"
 APP_NAME="QwenPaw"
@@ -56,7 +56,7 @@ _profiler end wheel_build
 _profiler start conda_pack_env
 
 echo "== Building conda-packed env =="
-python "${PACK_DIR}/build_common.py" --output "$ARCHIVE" --format tar.gz \
+python3 "${PACK_DIR}/build_common.py" --output "$ARCHIVE" --format tar.gz \
   --profiling-output "${DIST}/build_common_profiling.json"
 
 _profiler end conda_pack_env
