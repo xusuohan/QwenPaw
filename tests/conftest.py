@@ -39,6 +39,19 @@ for _module in _MISSING_MODULES:
 
 
 @pytest.fixture
+def dist_dir() -> Path:
+    """Path to the latest QwenPaw-Portable_* directory in dist/.
+
+    Skips the test if no portable build is available.
+    """
+    dist = Path("dist")
+    candidates = sorted(dist.glob("QwenPaw-Portable_*"), reverse=True)
+    if not candidates:
+        pytest.skip("No QwenPaw-Portable_* found in dist/")
+    return candidates[0]
+
+
+@pytest.fixture
 def temp_workspace() -> Generator[Path, None, None]:
     """Provide a temporary workspace directory.
 
