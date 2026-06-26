@@ -183,9 +183,40 @@ full = ["qwenpaw[local,ml,browser,channels]"]
 | # | 内容 | 风险 | 建议优先级 |
 |---|---|---|---|
 | 1 | macOS x86_64 本机构建验证 | 低 | 用户侧验证 |
-| 2 | Windows 便携版 smoke test 诊断 | 中 | 需 Windows 环境 |
+| 2 | Windows 便携版 smoke test 诊断 + 平台适配 | 中 | 需 Windows 环境 |
 | 3 | conda-pack compress-level 调优（1 vs 4） | 低 | 可选 |
 | 4 | whisper 支持（需解决 llvmlite 编译） | 高 | 需 LLVM 或预编译 wheel |
+
+### 任务 2 详细说明：Windows 便携版 smoke test 诊断 + 平台适配
+
+**前置条件**：macOS Intel 架构打包运行逻辑已调试适配完成（缓存链条、optional-dependencies、strip 优化均已验证通过）。
+
+**第一阶段：Windows 便携版冒烟测试与问题诊断**
+
+1. 在 Windows 环境运行 `make portable-windows`（或 `powershell -File scripts/pack/build_win_portable.ps1`）
+2. 运行 smoke test：`windows\env\python.exe -c "import qwenpaw; print(qwenpaw.__version__)"`
+3. 若失败，收集诊断信息（`dist/diagnostics/`）：
+   - `python_version.txt` — Python 版本
+   - `pip_list.txt` — 已安装包列表
+   - `path.txt` — PATH 环境变量
+   - `unpack_log.txt` — conda-unpack 输出
+4. 分析根因（预期可能是 conda-unpack bug #154 变体、长路径问题、DLL 缺失等）
+
+**第二阶段：复用 macOS 适配方案完善 Windows 打包流程**
+
+基于 macOS Intel 架构已验证的适配方案，针对性完善 Windows 平台：
+
+1. **缓存链条适配**：确认 `wheel_build.sh`（Windows 用 `wheel_build.ps1`）的源码 hash 检查在 Windows 上正常工作；确认 `build_win_portable.ps1` 的清理逻辑保留 wheel
+2. **optional-dependencies 适配**：确认 `build_common.py` 的 `[full]` extra 在 Windows conda 环境中正确解析（特别是 `onnxruntime` 的 Windows wheel）
+3. **strip 优化适配**：Windows 无 `strip` 命令，评估是否需要用 MSVC `editbin` 或跳过（Windows .pyd 已由 MSVC 优化）
+4. **profiling 集成验证**：确认 `build_profiler.py` CLI 在 Windows 上的 `time.time()` 跨进程行为正确
+5. **conda-unpack bug workaround**：验证 `CONDA_UNPACK_AFFECTED_PACKAGES` 重装逻辑在新版 conda-pack 上是否仍需要
+6. **长路径问题**：验证 `extract_zip.py` 的 `\\?\` 前缀在新版 Windows 上是否仍需要
+
+**产出物**：
+- Windows 便携版构建 profiling 数据（`build_profiling.json`）
+- 问题诊断报告（如有）
+- 必要的脚本修复（`build_win_portable.ps1`、`wheel_build.ps1`）
 
 ---
 
