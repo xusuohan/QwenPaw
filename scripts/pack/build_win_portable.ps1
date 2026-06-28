@@ -346,8 +346,11 @@ if exist "%CERT_FILE%" (
 REM Log level
 if not defined QWENPAW_LOG_LEVEL set "QWENPAW_LOG_LEVEL=info"
 
-REM Launch (fix-paths runs in-process via --fix-paths flag)
-"%~dp0env\python.exe" -u -m qwenpaw desktop --fix-paths --log-level %QWENPAW_LOG_LEVEL%
+REM Rewrite stale paths before launch
+"%~dp0env\python.exe" -u -m qwenpaw fix-paths
+
+REM Launch desktop
+"%~dp0env\python.exe" -u -m qwenpaw desktop --log-level %QWENPAW_LOG_LEVEL%
 
 REM Cleanup handled by Windows Job Object (KILL_ON_JOB_CLOSE) in desktop_cmd.py
 "@ | Set-Content -Path $StartBat -Encoding ASCII
@@ -407,10 +410,13 @@ echo Log Level: %QWENPAW_LOG_LEVEL%
 echo SSL_CERT_FILE: %SSL_CERT_FILE%
 echo.
 
+echo [fix-paths] Rewriting stale paths...
+"%~dp0env\python.exe" -u -m qwenpaw fix-paths
+echo.
 echo [Launch] Starting QwenPaw Desktop with log-level=%QWENPAW_LOG_LEVEL%...
 echo Press Ctrl+C to stop
 echo.
-"%~dp0env\python.exe" -u -m qwenpaw desktop --fix-paths --log-level %QWENPAW_LOG_LEVEL%
+"%~dp0env\python.exe" -u -m qwenpaw desktop --log-level %QWENPAW_LOG_LEVEL%
 echo.
 echo [Exit] QwenPaw Desktop closed
 
