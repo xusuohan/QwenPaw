@@ -219,11 +219,15 @@ Write-Host "== Pre-compiling Python bytecode for faster startup =="
 $CompileSkipRegex = "kubernetes|sympy|modelscope|twilio|lark_oapi|transformers|onnxruntime|huggingface_hub|playwright|discord|matrix.nio|telegram|pillow"
 $compileStart = Get-Date
 $compileTimeoutSec = 600  # 10 minutes max for bytecode compilation
+# Use absolute paths — Start-Job does not inherit the caller's working
+# directory (especially under Git Bash / MINGW64), so relative paths fail.
+$AbsPythonExe = (Resolve-Path $PythonExePath).Path
+$AbsEnvDir    = (Resolve-Path $EnvDir).Path
 $compileJob = Start-Job -ScriptBlock {
   param($py, $skipRx, $dir)
   & $py -m compileall -q -j 0 --invalidation-mode checked-hash -x $skipRx $dir
   return $LASTEXITCODE
-} -ArgumentList $PythonExePath, $CompileSkipRegex, $EnvDir
+} -ArgumentList $AbsPythonExe, $CompileSkipRegex, $AbsEnvDir
 $compileResult = $compileJob | Wait-Job -Timeout $compileTimeoutSec
 if ($null -eq $compileResult) {
   Write-Host "[build_win_portable] WARN: compileall timed out after ${compileTimeoutSec}s, stopping..." -ForegroundColor Yellow
