@@ -2,14 +2,14 @@
 
 > **用途**：本文是 QwenPaw 便携版打包优化工作的**唯一权威基准**。任何新会话接手前，先读完本文，再按需读对应 spec / plan。本文锁定：已完成成果、设计决策、硬约束、剩余任务、流程约定与已知坑。
 >
-> **最后更新**：2026-06-25（缓存链条修复完成后）。
-> **当前状态**：分支 `feature/usb-portable`。Phase 1（Profiling）+ Phase 2（优化）已实现。
+> **最后更新**：2026-06-26（Phase 4 Windows 平台适配完成后）。
+> **当前状态**：分支 `feature/usb-portable`。Phase 1-4 已实现。Windows 便携版 smoke test 通过。
 
 ***
 
 ## 0. 一句话现状
 
-三大核心场景（构建耗时 / 包体体积 / 多架构适配）**均有实质进展**。构建耗时：首次 16.5 min → 缓存命中 1.2 min（**13 倍提速**）。包体体积：948 MB → 850 MB（**-104 MB**）。多架构：CI 已扩展 macOS x86\_64 + Windows smoke test。**缓存链条已完全修复**——wheel 保留 + env 保留 + archive 条件移除，三层清理不再互相破坏。
+三大核心场景（构建耗时 / 包体体积 / 多架构适配）**均有实质进展**。构建耗时：首次 16.5 min → 缓存命中 1.2 min（**13 倍提速**）。包体体积：948 MB → 850 MB（**-104 MB**）。多架构：CI 已扩展 macOS x86\_64 + Windows smoke test。**缓存链条已完全修复**——wheel 保留 + env 保留 + archive 条件移除，三层清理不再互相破坏。**Windows 便携版 smoke test 已通过**（v1.1.6），首次构建 ~29 min，DLL strip 跳过（无 editbin）。
 
 ***
 
@@ -20,7 +20,7 @@
 - 规格文档：`docs/superpowers/specs/2026-06-24-打包优化-design.md`（**完整设计**，三大场景 + profiling 基础设施）。
 - Phase 计划：`docs/superpowers/plans/2026-06-24-打包优化-phase1-profiling.md`。
 - 运行时性能优化基准：`docs/PROGRESS_BASELINE.md`（Phase 1-5 + 4b-4j 已完成）。
-- 本次打包优化提交范围：`905d5fd8`（spec）→ `142377f0`（HEAD），共 \~22 个提交。
+- 本次打包优化提交范围：`905d5fd8`（spec）→ `290f916b`（HEAD），共 \~26 个提交。
 
 ***
 
@@ -120,6 +120,30 @@
 | conda\_pack                                  | 75s   | 仅此阶段运行     |
 | unpack + strip + compileall + platform\_pack | \~30s | 平台脚本       |
 
+### Phase 4 — Windows 平台适配（`e9b08bd7` → `290f916b`）
+
+| Commit     | 内容                                                                |
+| ---------- | ----------------------------------------------------------------- |
+| `e9b08bd7` | fix(pack): preserve wheel and profiling files in Windows cleanup  |
+| `6eb75669` | feat(pack): add optional DLL stripping for Windows builds         |
+| `d15d949d` | fix(pack): move profiling function definitions before first call in Windows build |
+| `290f916b` | fix(pack): increase smoke-test timeout to 90s and fix profiler total\_duration\_s |
+
+**Windows 构建验证**：
+- smoke test：PASS（version 1.1.6）
+- DLL strip：跳过（构建机无 editbin/MSVC）
+- 构建 profiling（首次，无缓存）：
+
+| 阶段               | 耗时                 | 占比     |
+| ---------------- | ------------------ | ------ |
+| wheel\_build     | 0.6s               | <0.1%  |
+| **conda\_pack\_env** | **1,070.3s (17.8 min)** | **61.5%** |
+| unpack           | 266.7s (4.4 min)   | 15.3%  |
+| compileall       | 393.6s (6.6 min)   | 22.6%  |
+| strip            | 2.7s（跳过）           | 0.2%   |
+| platform\_pack   | 5.3s               | 0.3%   |
+| **总计**           | **~1,739s (~29 min)** |        |
+
 ***
 
 ## 5. Profiling 数据（本机 Intel Mac）
@@ -188,7 +212,7 @@ full = ["qwenpaw[local,ml,browser,channels]"]
 | # | 内容                                   | 风险 | 建议优先级             |
 | - | ------------------------------------ | -- | ----------------- |
 | 1 | macOS x86\_64 本机构建验证                 | 低  | 用户侧验证             |
-| 2 | Windows 便携版 smoke test 诊断 + 平台适配     | 中  | 需 Windows 环境      |
+| ~~2~~ | ~~Windows 便携版 smoke test 诊断 + 平台适配~~ | ~~中~~ | ~~已完成 (Phase 4)~~ |
 | 3 | conda-pack compress-level 调优（1 vs 4） | 低  | 可选                |
 | 4 | whisper 支持（需解决 llvmlite 编译）          | 高  | 需 LLVM 或预编译 wheel |
 
@@ -245,6 +269,8 @@ full = ["qwenpaw[local,ml,browser,channels]"]
 4. **llvmlite/numba 编译失败**：`openai-whisper` 依赖 `numba`→`llvmlite`，在 macOS x86\_64 上无预编译 wheel，需要 LLVM。已从 `[full]` 排除 whisper。**不要将 whisper 加回** **`[full]`** 除非解决了 llvmlite 编译问题。
 5. **modelscope 依赖链**：`modelscope`→`numba`→`llvmlite`，同样有编译问题。已从 `ml` 组移除。用户需要时单独 `pip install modelscope`。
 6. **profiling JSON 被 dist/ 清理删除**：已修复——`build_portable.sh` 在清理前将 profiling JSON 移入便携版目录。
+7. **Windows Defender cold-start scanning**：首次导入刚解压的包时，Defender 文件扫描可导致单次 import 超过 30s。smoke test 超时已增加到 90s。**Workaround**：若首次 smoke test 超时，重跑一次即可（Defender 已缓存扫描结果）。
+8. **PowerShell function hoisting**：PowerShell 5.1 不会提升函数定义。函数必须在首次调用前定义。与 JavaScript 的 `function` 声明不同，PowerShell 中的 `function Name() {}` 不会被提升到作用域顶部。**务必确保 `build_win_portable.ps1` 中所有函数定义在脚本上部**。
 
 ***
 

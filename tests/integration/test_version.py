@@ -46,3 +46,13 @@ def test_version_via_subprocess() -> None:
     version = result.stdout.strip()
     assert version
     assert "." in version
+
+
+def test_version_exposed_at_package_level() -> None:
+    """Test that __version__ is accessible as qwenpaw.__version__."""
+    import qwenpaw
+
+    assert hasattr(qwenpaw, "__version__")
+    from qwenpaw.__version__ import __version__ as expected
+
+    assert qwenpaw.__version__ == expected

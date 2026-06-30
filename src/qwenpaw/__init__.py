@@ -56,3 +56,5 @@ logging.getLogger(__name__).debug(
     "%.3fs package init",
     time.perf_counter() - _t0,
 )
+
+from .__version__ import __version__  # noqa: E402

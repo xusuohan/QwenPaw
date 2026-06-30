@@ -59,6 +59,22 @@ $DataDir = Join-Path $PortableRoot "data"
 
 New-Item -ItemType Directory -Force -Path $Dist | Out-Null
 
+# --- Profiling ---
+$script:ProfilingState = Join-Path $Dist ".build_profiler_state.json"
+$script:ProfilingOutput = Join-Path $Dist "build_profiling.json"
+
+function Start-ProfilStage($name) {
+  & $PythonCmd "$PackDir\build_profiler.py" start $name --state-file $script:ProfilingState --platform "Windows-$([System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture)" --python-version "3.10"
+}
+
+function Stop-ProfilStage($name) {
+  & $PythonCmd "$PackDir\build_profiler.py" end $name --state-file $script:ProfilingState
+}
+
+function Save-ProfilReport() {
+  & $PythonCmd "$PackDir\build_profiler.py" save $script:ProfilingOutput --state-file $script:ProfilingState
+}
+
 # --- Build wheel ---
 Start-ProfilStage "wheel_build"
 Write-Host "== Building wheel (includes console frontend) =="
@@ -104,22 +120,6 @@ if (-not $PythonCmd) {
   throw "Python not found."
 }
 Write-Host "[build_win_portable] Using Python: $PythonCmd"
-
-# --- Profiling ---
-$script:ProfilingState = Join-Path $Dist ".build_profiler_state.json"
-$script:ProfilingOutput = Join-Path $Dist "build_profiling.json"
-
-function Start-ProfilStage($name) {
-  & $PythonCmd "$PackDir\build_profiler.py" start $name --state-file $script:ProfilingState --platform "Windows-$([System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture)" --python-version "3.10"
-}
-
-function Stop-ProfilStage($name) {
-  & $PythonCmd "$PackDir\build_profiler.py" end $name --state-file $script:ProfilingState
-}
-
-function Save-ProfilReport() {
-  & $PythonCmd "$PackDir\build_profiler.py" save $script:ProfilingOutput --state-file $script:ProfilingState
-}
 
 Start-ProfilStage "conda_pack_env"
 & $PythonCmd $PackDir\build_common.py --output $Archive --format zip --profiling-output (Join-Path $Dist "build_common_profiling.json")
@@ -219,11 +219,15 @@ Write-Host "== Pre-compiling Python bytecode for faster startup =="
 $CompileSkipRegex = "kubernetes|sympy|modelscope|twilio|lark_oapi|transformers|onnxruntime|huggingface_hub|playwright|discord|matrix.nio|telegram|pillow"
 $compileStart = Get-Date
 $compileTimeoutSec = 600  # 10 minutes max for bytecode compilation
+# Use absolute paths — Start-Job does not inherit the caller's working
+# directory (especially under Git Bash / MINGW64), so relative paths fail.
+$AbsPythonExe = (Resolve-Path $PythonExePath).Path
+$AbsEnvDir    = (Resolve-Path $EnvDir).Path
 $compileJob = Start-Job -ScriptBlock {
   param($py, $skipRx, $dir)
   & $py -m compileall -q -j 0 --invalidation-mode checked-hash -x $skipRx $dir
   return $LASTEXITCODE
-} -ArgumentList $PythonExePath, $CompileSkipRegex, $EnvDir
+} -ArgumentList $AbsPythonExe, $CompileSkipRegex, $AbsEnvDir
 $compileResult = $compileJob | Wait-Job -Timeout $compileTimeoutSec
 if ($null -eq $compileResult) {
   Write-Host "[build_win_portable] WARN: compileall timed out after ${compileTimeoutSec}s, stopping..." -ForegroundColor Yellow
@@ -241,6 +245,32 @@ if ($compileExit -ne 0) {
   Write-Host "[build_win_portable] WARN: compileall exit $compileExit (some files skipped), continuing..." -ForegroundColor Yellow
 }
 Stop-ProfilStage "compileall"
+
+# --- Strip debug symbols from DLLs (optional, requires MSVC toolchain) ---
+Start-ProfilStage "strip"
+Write-Host "== Stripping debug symbols from DLLs =="
+$_editbin = Get-Command editbin -ErrorAction SilentlyContinue
+if ($_editbin) {
+  $stripStart = Get-Date
+  $stripCount = 0
+  $stripSaved = 0
+  Get-ChildItem -Path $EnvDir -Recurse -Include "*.dll","*.pyd" -ErrorAction SilentlyContinue | ForEach-Object {
+    $origSize = $_.Length
+    & editbin /RELEASE $_.FullName 2>$null
+    if ($LASTEXITCODE -eq 0) {
+      $stripCount++
+      $stripSaved += ($origSize - $_.Length)
+    }
+    $global:LASTEXITCODE = 0
+  }
+  $stripEnd = Get-Date
+  $stripTime = ($stripEnd - $stripStart).TotalSeconds
+  $savedMB = [math]::Round($stripSaved / 1MB, 1)
+  Write-Host "[build_win_portable] Stripped $stripCount files, saved ${savedMB}MB in $([math]::Round($stripTime, 1))s"
+} else {
+  Write-Host "[build_win_portable] editbin not found — skipping DLL stripping (Windows DLLs are typically pre-stripped by MSVC)" -ForegroundColor Yellow
+}
+Stop-ProfilStage "strip"
 
 # --- Copy icon ---
 $IconSrc = Join-Path $PackDir "assets\icon.ico"
@@ -320,8 +350,11 @@ if exist "%CERT_FILE%" (
 REM Log level
 if not defined QWENPAW_LOG_LEVEL set "QWENPAW_LOG_LEVEL=info"
 
-REM Launch (fix-paths runs in-process via --fix-paths flag)
-"%~dp0env\python.exe" -u -m qwenpaw desktop --fix-paths --log-level %QWENPAW_LOG_LEVEL%
+REM Rewrite stale paths before launch
+"%~dp0env\python.exe" -u -m qwenpaw fix-paths
+
+REM Launch desktop
+"%~dp0env\python.exe" -u -m qwenpaw desktop --log-level %QWENPAW_LOG_LEVEL%
 
 REM Cleanup handled by Windows Job Object (KILL_ON_JOB_CLOSE) in desktop_cmd.py
 "@ | Set-Content -Path $StartBat -Encoding ASCII
@@ -381,15 +414,24 @@ echo Log Level: %QWENPAW_LOG_LEVEL%
 echo SSL_CERT_FILE: %SSL_CERT_FILE%
 echo.
 
+echo [fix-paths] Rewriting stale paths...
+"%~dp0env\python.exe" -u -m qwenpaw fix-paths
+echo.
 echo [Launch] Starting QwenPaw Desktop with log-level=%QWENPAW_LOG_LEVEL%...
 echo Press Ctrl+C to stop
 echo.
-"%~dp0env\python.exe" -u -m qwenpaw desktop --fix-paths --log-level %QWENPAW_LOG_LEVEL%
+"%~dp0env\python.exe" -u -m qwenpaw desktop --log-level %QWENPAW_LOG_LEVEL%
 echo.
 echo [Exit] QwenPaw Desktop closed
 
 REM Cleanup handled by Windows Job Object (KILL_ON_JOB_CLOSE) in desktop_cmd.py
-pause
+REM Pause only on non-zero exit so the console doesn't block USB eject on clean close.
+if errorlevel 1 (
+    echo [Error] QwenPaw exited with code %errorlevel%
+    pause
+) else (
+    timeout /t 3 >nul
+)
 "@ | Set-Content -Path $DebugBat -Encoding ASCII
 
 # start.vbs - no console window
@@ -474,23 +516,31 @@ Save-ProfilReport
 # --- Smoke test ---
 Write-Host "== Running smoke test =="
 $smokeStart = Get-Date
-try {
-  $smokeOut = & $PythonExePath -c "import qwenpaw; print(qwenpaw.__version__)" 2>&1
+$smokeScript = Join-Path $RepoRoot "scripts\smoke-test.py"
+if (Test-Path $smokeScript) {
+  try {
+    & $PythonExePath $smokeScript --portable-dir $PortableRoot --verbose
+    if ($LASTEXITCODE -ne 0) {
+      Write-Host "[build_win_portable] Smoke test FAILED" -ForegroundColor Red
+    }
+  } catch {
+    Write-Host "[build_win_portable] Smoke test threw exception: $_" -ForegroundColor Red
+    Write-Host "[build_win_portable] Falling back to inline check..." -ForegroundColor Yellow
+    $smokeOut = & $PythonExePath -c "from qwenpaw.__version__ import __version__; print(__version__)" 2>&1
+    if ($LASTEXITCODE -eq 0) {
+      Write-Host "[build_win_portable] Inline smoke test PASSED: $smokeOut" -ForegroundColor Green
+    } else {
+      Write-Host "[build_win_portable] Inline smoke test FAILED (exit code $LASTEXITCODE)" -ForegroundColor Red
+    }
+  }
+} else {
+  Write-Host "[build_win_portable] WARN: smoke-test.py not found, running inline check" -ForegroundColor Yellow
+  $smokeOut = & $PythonExePath -c "from qwenpaw.__version__ import __version__; print(__version__)" 2>&1
   if ($LASTEXITCODE -eq 0) {
     Write-Host "[build_win_portable] Smoke test PASSED: $smokeOut" -ForegroundColor Green
   } else {
     Write-Host "[build_win_portable] Smoke test FAILED (exit code $LASTEXITCODE)" -ForegroundColor Red
-    Write-Host "[build_win_portable] Output: $smokeOut" -ForegroundColor Red
-    # Collect diagnostics
-    $diagDir = Join-Path $Dist "diagnostics"
-    New-Item -ItemType Directory -Force -Path $diagDir | Out-Null
-    & $PythonExePath -c "import sys; print(sys.version)" 2>&1 | Out-File (Join-Path $diagDir "python_version.txt")
-    & $PythonExePath -m pip list 2>&1 | Out-File (Join-Path $diagDir "pip_list.txt")
-    $env:PATH | Out-File (Join-Path $diagDir "path.txt")
-    Write-Host "[build_win_portable] Diagnostics saved to $diagDir"
   }
-} catch {
-  Write-Host "[build_win_portable] Smoke test EXCEPTION: $_" -ForegroundColor Red
 }
 $smokeEnd = Get-Date
 Write-Host "[build_win_portable] Smoke test took $([math]::Round(($smokeEnd - $smokeStart).TotalSeconds, 1))s"
@@ -507,12 +557,16 @@ if ($env:CREATE_ZIP -eq "1") {
 
 # --- Clean intermediate artifacts (keep ALL QwenPaw-Portable_* directories) ---
 Write-Host "== Cleaning build artifacts =="
-# Remove everything in dist/ except historical portable packages.
-# This matches build_portable.sh: drops env.zip, wheels, sdists, temp dirs,
-# while preserving every QwenPaw-Portable_<timestamp>/ ever produced.
+# Remove everything in dist/ except historical portable packages and cache files.
+# This matches build_portable.sh: preserves QwenPaw-Portable_* dirs,
+# qwenpaw-*.whl, qwenpaw-*.tar.gz (cache chain), and profiling output.
 if (Test-Path $Dist) {
   Get-ChildItem -Path $Dist -ErrorAction SilentlyContinue | Where-Object {
-    $_.Name -notmatch '^QwenPaw-Portable_'
+    $_.Name -notmatch '^QwenPaw-Portable_' -and
+    $_.Name -notmatch '^qwenpaw-.*\.whl$' -and
+    $_.Name -notmatch '^qwenpaw-.*\.tar\.gz$' -and
+    $_.Name -ne 'build_profiling.json' -and
+    $_.Name -ne 'build_common_profiling.json'
   } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
 }
 # Strip .DS_Store droppings (cross-platform copy from macOS can leave these).

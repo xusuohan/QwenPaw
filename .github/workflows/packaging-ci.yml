@@ -1,0 +1,83 @@
+name: Packaging CI
+
+on:
+  push:
+    branches: [feature/*]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: Build & Smoke Test (${{ matrix.platform }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: windows
+          - os: macos-latest
+            platform: macos
+          - os: ubuntu-latest
+            platform: linux
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Miniconda
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          miniconda-version: "latest"
+          activate-environment: ""
+          auto-activate-base: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: console/package-lock.json
+
+      - name: Install npm dependencies
+        run: cd console && npm ci
+
+      - name: Build portable (Windows)
+        if: matrix.platform == 'windows'
+        run: |
+          conda activate base
+          .\scripts\pack\build_win_portable.ps1
+        env:
+          DIST: dist
+        shell: powershell
+
+      - name: Build portable (macOS/Linux)
+        if: matrix.platform != 'windows'
+        run: |
+          source "$CONDA/bin/activate"
+          bash ./scripts/pack/build_portable.sh
+        env:
+          DIST: dist
+
+      - name: Run smoke test
+        run: python3 scripts/smoke-test.py --verbose
+        shell: bash
+
+      - name: Upload diagnostics (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: diagnostics-${{ matrix.platform }}
+          path: dist/diagnostics/
+          retention-days: 7
+
+      - name: Upload portable artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: QwenPaw-Portable-${{ matrix.platform }}
+          path: dist/QwenPaw-Portable_*/
+          retention-days: 7
