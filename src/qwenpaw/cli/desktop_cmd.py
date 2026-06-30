@@ -539,7 +539,7 @@ def desktop_cmd(
                 logger.info("HTTP ready, creating webview window...")
                 api = WebViewAPI()
                 webview.create_window(
-                    "QwenPaw Desktop",
+                    "aixcore Desktop",
                     url,
                     width=1280,
                     height=800,

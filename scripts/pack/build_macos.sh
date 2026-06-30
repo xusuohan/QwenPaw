@@ -17,7 +17,7 @@ _profiler() {
   python3 "${PACK_DIR}/build_profiler.py" "$@" --state-file "${PROFILING_STATE}"
 }
 ARCHIVE="${DIST}/qwenpaw-env.tar.gz"
-APP_NAME="QwenPaw"
+APP_NAME="aixcore"
 APP_DIR="${DIST}/${APP_NAME}.app"
 
 ARCH="$(uname -m)"

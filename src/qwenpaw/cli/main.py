@@ -146,7 +146,7 @@ class LazyGroup(click.Group):
         ),
     },
 )
-@click.version_option(version=__version__, prog_name="QwenPaw")
+@click.version_option(version=__version__, prog_name="aixcore")
 @click.option("--host", default=None, help="API Host")
 @click.option(
     "--port",
@@ -156,7 +156,7 @@ class LazyGroup(click.Group):
 )
 @click.pass_context
 def cli(ctx: click.Context, host: str | None, port: int | None) -> None:
-    """QwenPaw CLI."""
+    """aixcore CLI."""
     # Warm OS page cache for bytecode/C-ext on slow USB media. Best-effort
     # daemon thread; toggle via QWENPAW_PERF_IMPORT_PREFETCH (default on).
     if os.environ.get("QWENPAW_PERF_IMPORT_PREFETCH", "1").lower() not in (
