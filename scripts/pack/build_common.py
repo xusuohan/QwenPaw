@@ -236,6 +236,23 @@ def main() -> int:
                 # Prevent pip from installing to user site-packages
                 install_env["PYTHONNOUSERSITE"] = "1"
 
+                # Optional mirror support: set QWENPAW_PIP_INDEX_URL to use a
+                # non-default index (e.g. tsinghua mirror when SSL to pypi.org
+                # is being interfered with). QWENPAW_PIP_TRUSTED_HOST avoids
+                # certificate verification failures on hijacked networks.
+                extra_pip_args = []
+                index_url = os.environ.get("QWENPAW_PIP_INDEX_URL")
+                trusted_host = os.environ.get("QWENPAW_PIP_TRUSTED_HOST")
+                if index_url:
+                    extra_pip_args += ["--index-url", index_url]
+                if trusted_host:
+                    extra_pip_args += ["--trusted-host", trusted_host]
+                if extra_pip_args:
+                    print(
+                        f"Using pip mirror: index_url={index_url or '(default)'} "
+                        f"trusted_host={trusted_host or '(none)'}"
+                    )
+
                 pip_cmd = [
                     conda,
                     "run",
@@ -249,6 +266,7 @@ def main() -> int:
                     "3",
                     "--timeout",
                     "120",
+                    *extra_pip_args,
                     f"qwenpaw[full] @ {wheel_uri}",
                 ]
                 _max_retries = 2

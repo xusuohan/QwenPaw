@@ -425,7 +425,13 @@ echo.
 echo [Exit] QwenPaw Desktop closed
 
 REM Cleanup handled by Windows Job Object (KILL_ON_JOB_CLOSE) in desktop_cmd.py
-pause
+REM Pause only on non-zero exit so the console doesn't block USB eject on clean close.
+if errorlevel 1 (
+    echo [Error] QwenPaw exited with code %errorlevel%
+    pause
+) else (
+    timeout /t 3 >nul
+)
 "@ | Set-Content -Path $DebugBat -Encoding ASCII
 
 # start.vbs - no console window
