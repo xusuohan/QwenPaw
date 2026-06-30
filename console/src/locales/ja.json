@@ -55,6 +55,7 @@
     "environments": "環境変数",
     "security": "セキュリティ",
     "tokenUsage": "トークン使用量",
+    "recharge": "残高チャージ",
     "agentStats": "エージェント統計",
     "tools": "ツール",
     "voiceTranscription": "音声文字起こし",

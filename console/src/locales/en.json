@@ -60,6 +60,7 @@
     "environments": "Environments",
     "security": "Security",
     "tokenUsage": "Token Usage",
+    "recharge": "Recharge",
     "agentStats": "Agent Statistics",
     "voiceTranscription": "Voice Transcription",
     "debug": "Debug",

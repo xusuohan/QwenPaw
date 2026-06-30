@@ -60,6 +60,7 @@
     "environments": "环境变量",
     "security": "安全",
     "tokenUsage": "Token 消耗",
+    "recharge": "余额充值",
     "agentStats": "智能体统计",
     "voiceTranscription": "语音转写",
     "debug": "调试",

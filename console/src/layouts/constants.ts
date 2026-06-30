@@ -4,6 +4,9 @@ export const PYPI_URL = "https://pypi.org/pypi/qwenpaw/json";
 
 export const GITHUB_URL = "https://github.com/agentscope-ai/QwenPaw" as const;
 
+/** Balance recharge portal — opened in the system default browser. */
+export const RECHARGE_URL = "https://test-aixcore-pay.goldlokai.com/" as const;
+
 // ── Timing ────────────────────────────────────────────────────────────────
 
 export const ONE_HOUR_MS = 60 * 60 * 1000;
