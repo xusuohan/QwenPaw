@@ -1694,7 +1694,7 @@ def list_workspaces() -> list[dict[str, str]]:
     """List configured workspaces with agent names."""
     workspaces: list[dict[str, str]] = []
     try:
-        from ..config.utils import load_config
+        from ..config.utils import load_config, resolve_workspace_path
         from ..config.config import load_agent_config
 
         config = load_config()
@@ -1710,8 +1710,12 @@ def list_workspaces() -> list[dict[str, str]]:
                 {
                     "agent_id": agent_id,
                     "agent_name": agent_name,
+                    # Resolve relative workspace_dir against WORKING_DIR
+                    # (portable configs store "workspaces/{id}"). Otherwise
+                    # mkdir() resolves it against the read-only process CWD
+                    # in packaged apps (OSError: Read-only file system).
                     "workspace_dir": str(
-                        Path(profile.workspace_dir).expanduser(),
+                        resolve_workspace_path(profile.workspace_dir),
                     ),
                 },
             )
