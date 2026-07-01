@@ -40,6 +40,26 @@ CREATE_ZIP=1 bash ./scripts/pack/build_macos.sh   # 同时生成 .zip
 #   - QwenPaw Desktop (Debug).bat (显示终端，便于调试)
 ```
 
+## 国内镜像（默认开启）
+
+`build_common.py` 默认走**清华 TUNA** 镜像拉取 conda 包与 PyPI wheel，保证国内网络下打包稳定快速：
+
+- **conda**：生成 `.cache/condarc.cn.yml`（`default_channels` 指向 TUNA 的 `pkgs/main`、`pkgs/r`、`pkgs/msys2`，`conda-forge` 走 `anaconda/cloud`），并通过 `CONDARC` 环境变量注入给每次 `conda create/install`，覆盖用户 `~/.condarc`，构建自包含、可复现。
+- **pip**：默认 `--index-url https://pypi.tuna.tsinghua.edu.cn/simple`。
+
+环境变量（可选）：
+
+| 变量 | 默认 | 说明 |
+|------|------|------|
+| `QWENPAW_CN_MIRROR` | `1` | 总开关。设为 `0` 关闭国内镜像，回退到 conda/pypi 上游 |
+| `QWENPAW_PIP_INDEX_URL` | TUNA | 单独覆盖 pip index（优先级高于总开关） |
+| `QWENPAW_PIP_TRUSTED_HOST` | （无） | 配合自定义 index 跳过证书校验 |
+
+```bash
+QWENPAW_CN_MIRROR=0 bash ./scripts/pack/build_macos.sh        # 用上游源
+QWENPAW_PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/ bash ./scripts/pack/build_macos.sh
+```
+
 ## 从终端启动并查看日志（macOS）
 
 如果双击 .app 会闪退，可以在终端里运行以查看完整报错和日志：
