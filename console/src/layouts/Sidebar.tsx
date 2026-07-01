@@ -9,7 +9,7 @@ import {
   type MenuProps,
 } from "antd";
 import { EyeOutlined, EyeInvisibleOutlined } from "@ant-design/icons";
-import { useState, useEffect } from "react";
+import { useState, useEffect, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useAppMessage } from "../hooks/useAppMessage";
@@ -40,17 +40,15 @@ import {
   SparkBarChartLine,
   SparkDebugLine,
   SparkSaveLine,
+  SparkCardAdditionLine,
 } from "@agentscope-ai/icons";
 import { clearAuthToken } from "../api/config";
 import { authApi } from "../api/modules/auth";
 import { usePlugins } from "../plugins/PluginContext";
 import styles from "./index.module.less";
 import { useTheme } from "../contexts/ThemeContext";
-import { KEY_TO_PATH, DEFAULT_OPEN_KEYS } from "./constants";
-import {
-  readShowAdvancedNav,
-  writeShowAdvancedNav,
-} from "./navConfig";
+import { KEY_TO_PATH, DEFAULT_OPEN_KEYS, RECHARGE_URL } from "./constants";
+import { readShowAdvancedNav, writeShowAdvancedNav } from "./navConfig";
 
 // ── Layout ────────────────────────────────────────────────────────────────
 
@@ -60,6 +58,14 @@ const { Sider } = Layout;
 
 interface SidebarProps {
   selectedKey: string;
+}
+
+interface CollapsedNavItem {
+  key: string;
+  icon: ReactNode;
+  path?: string;
+  url?: string;
+  label: string;
 }
 
 // ── Sidebar ───────────────────────────────────────────────────────────────
@@ -83,6 +89,18 @@ export default function Sidebar({ selectedKey }: SidebarProps) {
       writeShowAdvancedNav(next);
       return next;
     });
+  };
+
+  // Open a URL in the system default browser. In the portable desktop shell
+  // (pywebview) this routes through the native bridge so the link leaves the
+  // webview; in a regular browser it falls back to a new tab.
+  const handleExternalNav = (url: string) => {
+    if (!url) return;
+    if (window.pywebview?.api) {
+      window.pywebview.api.open_external_link(url);
+    } else {
+      window.open(url, "_blank");
+    }
   };
 
   // ── Effects ──────────────────────────────────────────────────────────────
@@ -151,7 +169,7 @@ export default function Sidebar({ selectedKey }: SidebarProps) {
 
   // ── Collapsed nav items (all leaf pages) ──────────────────────────────
 
-  const collapsedNavItems = [
+  const collapsedNavItems: CollapsedNavItem[] = [
     {
       key: "chat",
       icon: <SparkChatTabFill size={18} />,
@@ -271,6 +289,12 @@ export default function Sidebar({ selectedKey }: SidebarProps) {
       icon: <SparkDataLine size={18} />,
       path: "/token-usage",
       label: t("nav.tokenUsage"),
+    },
+    {
+      key: "recharge",
+      icon: <SparkCardAdditionLine size={18} />,
+      url: RECHARGE_URL,
+      label: t("nav.recharge"),
     },
     ...(showAdvancedNav
       ? [
@@ -433,6 +457,11 @@ export default function Sidebar({ selectedKey }: SidebarProps) {
           label: collapsed ? null : t("nav.tokenUsage"),
           icon: <SparkDataLine size={16} />,
         },
+        {
+          key: "recharge",
+          label: collapsed ? null : t("nav.recharge"),
+          icon: <SparkCardAdditionLine size={16} />,
+        },
         ...(showAdvancedNav
           ? [
               {
@@ -496,7 +525,10 @@ export default function Sidebar({ selectedKey }: SidebarProps) {
                   className={`${styles.collapsedNavItem} ${
                     isActive ? styles.collapsedNavItemActive : ""
                   }`}
-                  onClick={() => navigate(item.path)}
+                  onClick={() => {
+                    if (item.url) handleExternalNav(item.url);
+                    else if (item.path) navigate(item.path);
+                  }}
                 >
                   {item.icon}
                 </button>
@@ -534,6 +566,10 @@ export default function Sidebar({ selectedKey }: SidebarProps) {
               ...(pluginRoutes.length > 0 ? ["plugins-group"] : []),
             ]}
             onClick={({ key }) => {
+              if (String(key) === "recharge") {
+                handleExternalNav(RECHARGE_URL);
+                return;
+              }
               const path = KEY_TO_PATH[String(key)] ?? `/${String(key)}`;
               navigate(path);
             }}

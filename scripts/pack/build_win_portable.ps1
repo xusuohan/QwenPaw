@@ -1,6 +1,6 @@
 # One-click build: Windows portable (USB plug-and-play). Run from repo root.
 # Requires: conda, node/npm (for console).
-# Output: dist/QwenPaw-Portable/windows/
+# Output: dist/aixcore-Portable/windows/
 
 $ErrorActionPreference = "Stop"
 $RepoRoot = (Get-Item $PSScriptRoot).Parent.Parent.FullName
@@ -52,7 +52,7 @@ Write-Host "== All build dependencies found =="
 $Dist = if ($env:DIST) { $env:DIST } else { "dist" }
 $Archive = Join-Path $Dist "qwenpaw-env.zip"
 $_Timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
-$PortableRoot = Join-Path $Dist "QwenPaw-Portable_$_Timestamp"
+$PortableRoot = Join-Path $Dist "aixcore-Portable_$_Timestamp"
 $WinDir = Join-Path $PortableRoot "windows"
 $EnvDir = Join-Path $WinDir "env"
 $DataDir = Join-Path $PortableRoot "data"
@@ -313,7 +313,7 @@ $StartBat = Join-Path $WinDir "start.bat"
 @echo off
 cd /d "%~dp0"
 
-REM === QwenPaw Portable Launcher ===
+REM === aixcore Portable Launcher ===
 
 REM Resolve USB root (one level up from windows/)
 set "USB_ROOT=%~dp0.."
@@ -365,7 +365,7 @@ $DebugBat = Join-Path $WinDir "start-debug.bat"
 @echo off
 cd /d "%~dp0"
 
-REM === QwenPaw Portable Launcher (Debug Mode) ===
+REM === aixcore Portable Launcher (Debug Mode) ===
 
 REM Resolve USB root (one level up from windows/)
 set "USB_ROOT=%~dp0.."
@@ -403,7 +403,7 @@ if exist "%CERT_FILE%" (
 )
 
 echo ====================================
-echo QwenPaw Portable - Debug Mode
+echo aixcore Portable - Debug Mode
 echo ====================================
 echo USB Root: %USB_ROOT%
 echo Working Dir: %QWENPAW_WORKING_DIR%
@@ -472,7 +472,7 @@ if (-not $Version) { $Version = "0.0.0" }
 
 $ReadmePath = Join-Path $PortableRoot "README.txt"
 @"
-QwenPaw Portable
+aixcore Portable
 ================
 
 版本: $Version
@@ -548,21 +548,21 @@ Write-Host "[build_win_portable] Smoke test took $([math]::Round(($smokeEnd - $s
 # --- Optional: Create ZIP ---
 if ($env:CREATE_ZIP -eq "1") {
   Write-Host "== Creating ZIP archive =="
-  $ZipName = "QwenPaw-Portable-Windows-${Version}-${_Timestamp}.zip"
+  $ZipName = "aixcore-Portable-Windows-${Version}-${_Timestamp}.zip"
   $ZipPath = Join-Path $Dist $ZipName
   if (Test-Path $ZipPath) { Remove-Item $ZipPath -Force }
   Compress-Archive -Path $PortableRoot -DestinationPath $ZipPath -Force
   Write-Host "[build_win_portable] ZIP created: $ZipPath"
 }
 
-# --- Clean intermediate artifacts (keep ALL QwenPaw-Portable_* directories) ---
+# --- Clean intermediate artifacts (keep ALL aixcore-Portable_* directories) ---
 Write-Host "== Cleaning build artifacts =="
 # Remove everything in dist/ except historical portable packages and cache files.
-# This matches build_portable.sh: preserves QwenPaw-Portable_* dirs,
+# This matches build_portable.sh: preserves aixcore-Portable_* dirs,
 # qwenpaw-*.whl, qwenpaw-*.tar.gz (cache chain), and profiling output.
 if (Test-Path $Dist) {
   Get-ChildItem -Path $Dist -ErrorAction SilentlyContinue | Where-Object {
-    $_.Name -notmatch '^QwenPaw-Portable_' -and
+    $_.Name -notmatch '^aixcore-Portable_' -and
     $_.Name -notmatch '^qwenpaw-.*\.whl$' -and
     $_.Name -notmatch '^qwenpaw-.*\.tar\.gz$' -and
     $_.Name -ne 'build_profiling.json' -and
@@ -575,7 +575,7 @@ if (Test-Path $Dist) {
 Get-ChildItem -Path $PortableRoot -Recurse -Force -ErrorAction SilentlyContinue -File |
   Where-Object { $_.Name -eq ".DS_Store" } |
   Remove-Item -Force -ErrorAction SilentlyContinue
-Write-Host "[build_win_portable] Cleaned up intermediate files (all QwenPaw-Portable_* dirs kept)"
+Write-Host "[build_win_portable] Cleaned up intermediate files (all aixcore-Portable_* dirs kept)"
 
 # --- Summary ---
 Write-Host ""

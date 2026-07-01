@@ -131,9 +131,9 @@ class AgentRunner(Runner):
         if self._agent_name is None:
             try:
                 cfg = load_agent_config(self.agent_id)
-                self._agent_name = cfg.name if cfg and cfg.name else "QwenPaw"
+                self._agent_name = cfg.name if cfg and cfg.name else "aixcore"
             except Exception:
-                self._agent_name = "QwenPaw"
+                self._agent_name = "aixcore"
         return self._agent_name
 
     def invalidate_agent_name_cache(self) -> None:

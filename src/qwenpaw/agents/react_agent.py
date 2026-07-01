@@ -171,7 +171,7 @@ class QwenPawAgent(ToolGuardMixin, ReActAgent):
         )
         # Initialize parent ReActAgent
         init_kwargs: dict[str, Any] = {
-            "name": agent_config.name or "QwenPaw",
+            "name": agent_config.name or "aixcore",
             "model": model,
             "sys_prompt": sys_prompt,
             "toolkit": toolkit,
