@@ -6,7 +6,7 @@ REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$REPO_ROOT"
 DIST="${DIST:-dist}"
 _TIMESTAMP="$(date '+%Y%m%d_%H%M%S')"
-PORTABLE_DIR="${DIST}/QwenPaw-Portable_${_TIMESTAMP}"
+PORTABLE_DIR="${DIST}/aixcore-Portable_${_TIMESTAMP}"
 
 echo "== Building portable version (timestamp: ${_TIMESTAMP}) =="
 
@@ -16,7 +16,7 @@ case "$(uname -s)" in
     echo "Building macOS version..."
     bash scripts/pack/build_macos.sh
     mkdir -p "${PORTABLE_DIR}/macOS"
-    mv "${DIST}/QwenPaw.app" "${PORTABLE_DIR}/macOS/"
+    mv "${DIST}/aixcore.app" "${PORTABLE_DIR}/macOS/"
     ;;
   Linux*)
     echo "Building Linux version..."
@@ -47,7 +47,7 @@ case "$(uname -s)" in
 esac
 
 cat > "${PORTABLE_DIR}/README.txt" << README
-QwenPaw Portable
+aixcore Portable
 ================
 
 构建平台: ${PLATFORM_NAME}
@@ -55,7 +55,7 @@ QwenPaw Portable
 使用说明：
 1. 将此文件夹复制到 U 盘
 2. 运行对应程序：
-   - macOS: 运行 macOS/QwenPaw.app
+   - macOS: 运行 macOS/aixcore.app
    - Linux: 运行 linux/start.sh
    - Windows: 运行 windows/start.vbs（或 start.bat）
 
@@ -86,12 +86,12 @@ done
 # 清理本次构建的中间产物，保留已有的便携版目录和缓存文件
 echo "== Cleaning build artifacts =="
 # 删除 dist/ 下的中间产物，但保留：
-# - QwenPaw-Portable_* 便携版目录
+# - aixcore-Portable_* 便携版目录
 # - qwenpaw-*.whl wheel 文件（供下次构建复用，避免重复 npm build）
 # - qwenpaw-*.tar.gz sdist（wheel_build 产出）
 find "${DIST}" -maxdepth 1 \
   ! -name "$(basename "${DIST}")" \
-  ! -name "QwenPaw-Portable_*" \
+  ! -name "aixcore-Portable_*" \
   ! -name "qwenpaw-*.whl" \
   ! -name "qwenpaw-*.tar.gz" \
   -exec rm -rf {} + 2>/dev/null || true

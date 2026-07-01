@@ -60,7 +60,7 @@ class DaemonContext:
     agent_id: Optional[str] = None
     # Session ID for approval commands.
     session_id: str = ""
-    agent_name: str = "QwenPaw"
+    agent_name: str = "aixcore"
 
 
 def _get_last_lines(

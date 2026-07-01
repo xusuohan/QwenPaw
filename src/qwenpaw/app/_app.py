@@ -223,7 +223,7 @@ class DynamicMultiAgentRunner:
 runner = DynamicMultiAgentRunner()
 
 agent_app = AgentApp(
-    app_name="QwenPaw",
+    app_name="aixcore",
     app_description="A helpful assistant with background task support",
     runner=runner,
     enable_stream_task=True,

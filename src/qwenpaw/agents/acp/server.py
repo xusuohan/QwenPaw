@@ -460,7 +460,7 @@ class QwenPawACPAgent(Agent):
             ),
             agent_info=Implementation(
                 name="qwenpaw",
-                title="QwenPaw",
+                title="aixcore",
                 version=__version__,
             ),
         )

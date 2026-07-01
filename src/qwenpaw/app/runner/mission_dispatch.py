@@ -37,7 +37,7 @@ async def maybe_handle_mission_command(
     agent_id: str,
     rewrite_fn: Callable[[list, str], None],
     session_id: str = "",
-    agent_name: str = "QwenPaw",
+    agent_name: str = "aixcore",
 ) -> Msg | dict[str, Any] | None:
     """Handle ``/mission`` if the query matches.
 

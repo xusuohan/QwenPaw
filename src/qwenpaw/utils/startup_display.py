@@ -37,7 +37,7 @@ def print_ready_banner(
             f"http://{api_info[0]}:{api_info[1]}" if api_info else None
         )
         print()
-        print("  QwenPaw ready")
+        print("  aixcore ready")
         if url:
             print(f"  Address: {url}")
         if elapsed_seconds is not None:
@@ -56,7 +56,7 @@ def print_ready_banner(
 
         # Create tree structure (Docker/K8s style)
         tree = Tree(
-            "[bold green]✓[/bold green] [bold]QwenPaw[/bold]",
+            "[bold green]✓[/bold green] [bold]aixcore[/bold]",
             guide_style="bright_black",
         )
         tree.add("[dim]Status:[/dim]  [bold green]Ready[/bold green]")
@@ -79,7 +79,7 @@ def print_ready_banner(
     else:
         # Simple ready message without URL
         tree = Tree(
-            "[bold green]✓[/bold green] [bold]QwenPaw[/bold]",
+            "[bold green]✓[/bold green] [bold]aixcore[/bold]",
             guide_style="bright_black",
         )
         tree.add("[dim]Status:[/dim]  [bold green]Ready[/bold green]")
