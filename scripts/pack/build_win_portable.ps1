@@ -78,35 +78,21 @@ function Save-ProfilReport() {
 # --- Build wheel ---
 Start-ProfilStage "wheel_build"
 Write-Host "== Building wheel (includes console frontend) =="
+# Detect version (kept for later steps). Always invoke wheel_build.ps1, which
+# decides via its own source-content hash whether to rebuild — a version-only
+# check here would reuse a stale wheel when source changes without a bump.
 $VersionFile = Join-Path $RepoRoot "src\qwenpaw\__version__.py"
 $CurrentVersion = ""
 if (Test-Path $VersionFile) {
   $m = (Get-Content $VersionFile -Raw) -match '__version__\s*=\s*"([^"]+)"'
   if ($m) { $CurrentVersion = $Matches[1] }
 }
-$RunWheelBuild = $true
-if ($CurrentVersion) {
-  $wheelGlob = Join-Path $Dist "qwenpaw-$CurrentVersion-*.whl"
-  $existingWheels = Get-ChildItem -Path $wheelGlob -ErrorAction SilentlyContinue
-  if ($existingWheels.Count -gt 0) {
-    Write-Host "dist/ already has wheel for version $CurrentVersion, skipping."
-    $RunWheelBuild = $false
-  } else {
-    $oldWheels = Get-ChildItem -Path (Join-Path $Dist "qwenpaw-*.whl") -ErrorAction SilentlyContinue
-    if ($oldWheels.Count -gt 0) {
-      Write-Host "Removing old wheel files: $($oldWheels | ForEach-Object { $_.Name })"
-      $oldWheels | Remove-Item -Force
-    }
-  }
+$WheelBuildScript = Join-Path $RepoRoot "scripts\wheel_build.ps1"
+if (-not (Test-Path $WheelBuildScript)) {
+  throw "wheel_build.ps1 not found: $WheelBuildScript"
 }
-if ($RunWheelBuild) {
-  $WheelBuildScript = Join-Path $RepoRoot "scripts\wheel_build.ps1"
-  if (-not (Test-Path $WheelBuildScript)) {
-    throw "wheel_build.ps1 not found: $WheelBuildScript"
-  }
-  & $WheelBuildScript
-  if ($LASTEXITCODE -ne 0) { throw "wheel_build.ps1 failed with exit code $LASTEXITCODE" }
-}
+& $WheelBuildScript
+if ($LASTEXITCODE -ne 0) { throw "wheel_build.ps1 failed with exit code $LASTEXITCODE" }
 Stop-ProfilStage "wheel_build"
 
 # --- Build conda-packed env ---

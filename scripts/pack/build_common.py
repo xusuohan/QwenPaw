@@ -152,11 +152,29 @@ def _pick_wheel(wheel_arg: str | None) -> Path:
     return wheels[0]
 
 
-def _compute_env_hash(wheel_path: Path, python_version: str) -> str:
-    """Compute a hash of wheel content + python version for caching."""
+def _compute_deps_hash(python_version: str) -> str:
+    """Fingerprint of the dependency set + python version (not qwenpaw source).
+
+    Keys the env cache so a cached env is reused across qwenpaw source edits
+    as long as its dependencies are unchanged; qwenpaw itself is reinstalled
+    into the reused env (see the cache-hit branch in main). Falls back to
+    hashing the whole pyproject.toml when no TOML parser is available
+    (correct, just over-invalidates on version-only bumps).
+    """
+    pyproject = REPO_ROOT / "pyproject.toml"
+    text = pyproject.read_text(encoding="utf-8")
     h = hashlib.sha256()
     h.update(python_version.encode())
-    h.update(wheel_path.read_bytes())
+    try:
+        import tomllib
+
+        proj = tomllib.loads(text).get("project", {})
+        h.update(repr(sorted(proj.get("dependencies", []))).encode())
+        extras = proj.get("optional-dependencies", {})
+        for key in sorted(extras):
+            h.update(f"{key}={sorted(extras[key])}".encode())
+    except ModuleNotFoundError:
+        h.update(text.encode())
     return h.hexdigest()[:16]
 
 
@@ -264,13 +282,20 @@ def main() -> int:
 
     conda = _conda_exe()
 
-    # Check for cached environment.
-    # Only require the conda env to exist (not the archive, since
-    # build_portable.sh deletes dist/ artifacts after each build).
-    # When cached, we skip env creation and only re-run conda-pack.
-    env_hash = _compute_env_hash(wheel_path, args.python)
+    # Check for a cached environment keyed on the dependency set (NOT the
+    # qwenpaw wheel bytes), so the env is reused across source edits. On a hit
+    # we reinstall only qwenpaw into the reused env; only deps changes force a
+    # full rebuild. QWENPAW_PACK_NO_ENV_CACHE=1 forces a full rebuild.
+    env_hash = _compute_deps_hash(args.python)
     cached_env = _find_cached_env(env_hash)
     use_cache = cached_env is not None
+    if os.environ.get("QWENPAW_PACK_NO_ENV_CACHE", "").lower() in (
+        "1",
+        "true",
+        "yes",
+    ):
+        print("QWENPAW_PACK_NO_ENV_CACHE set; forcing full env rebuild.")
+        use_cache = False
 
     if use_cache:
         assert cached_env is not None
@@ -446,6 +471,36 @@ def main() -> int:
                 )
             # Save to cache for future reuse
             _save_cached_env(env_hash, env_name)
+        else:
+            # Cache hit (deps unchanged): reuse the env, only update qwenpaw to
+            # the freshly built wheel. --no-deps is safe because the deps hash
+            # matched; network-free and seconds-fast.
+            with profiler.stage("pip_reinstall_qwenpaw"):
+                print(
+                    f"Reusing cached env '{env_name}' (deps unchanged); "
+                    f"reinstalling only qwenpaw from {wheel_path.name}"
+                )
+                _run(
+                    [
+                        conda,
+                        "run",
+                        "-n",
+                        env_name,
+                        "python",
+                        "-m",
+                        "pip",
+                        "install",
+                        "--force-reinstall",
+                        "--no-deps",
+                        "--retries",
+                        "3",
+                        "--timeout",
+                        "120",
+                        *_pip_index_args(),
+                        f"qwenpaw @ {wheel_uri}",
+                    ],
+                    env={"PYTHONNOUSERSITE": "1"},
+                )
         with profiler.stage("conda_pack"):
             if out_path.exists():
                 out_path.unlink()

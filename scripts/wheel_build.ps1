@@ -46,6 +46,62 @@ Write-Host "== All build dependencies found =="
 $ConsoleDir = Join-Path $RepoRoot "console"
 $ConsoleDest = Join-Path $RepoRoot "src\qwenpaw\console"
 
+# --- Source hash check: skip rebuild if source unchanged (combined hash) ---
+# The bash version (wheel_build.sh) splits Python/console hashes to skip npm
+# on Python-only edits; PowerShell uses a single combined hash for simplicity.
+# Any error -> full rebuild (safe default). Skipping requires: marker exists,
+# a wheel for the current version exists, AND the hash matches exactly.
+$CacheDir = Join-Path $RepoRoot ".cache"
+if (-not (Test-Path $CacheDir)) { New-Item -ItemType Directory -Force -Path $CacheDir | Out-Null }
+$HashMarker = Join-Path $CacheDir "wheel_source_hash"
+
+function Get-StringHash {
+  param([string]$Content)
+  if ($null -eq $Content) { $Content = "" }
+  $bytes = [System.Text.Encoding]::UTF8.GetBytes($Content)
+  $sha = [System.Security.Cryptography.SHA256]::Create()
+  try { return ([BitConverter]::ToString($sha.ComputeHash($bytes)) -replace '-', '').ToLower() }
+  finally { $sha.Dispose() }
+}
+
+$SkipBuild = $false
+$SourceHash = $null
+try {
+  $pyFiles = @(Get-ChildItem -Path (Join-Path $RepoRoot "src") -Recurse -Filter *.py -ErrorAction SilentlyContinue | Where-Object { $_.FullName -notmatch '__pycache__' } | Sort-Object FullName)
+  $pyContent = ($pyFiles | ForEach-Object { Get-Content $_.FullName -Raw -ErrorAction SilentlyContinue }) -join "`n"
+  $pyContent += "`n" + (Get-Content (Join-Path $RepoRoot "pyproject.toml") -Raw -ErrorAction SilentlyContinue)
+  $consoleFiles = @(Get-ChildItem -Path (Join-Path $RepoRoot "console\src") -Recurse -Include *.ts,*.tsx -ErrorAction SilentlyContinue | Sort-Object FullName)
+  $consoleContent = ($consoleFiles | ForEach-Object { Get-Content $_.FullName -Raw -ErrorAction SilentlyContinue }) -join "`n"
+  $consoleContent += "`n" + (Get-Content (Join-Path $RepoRoot "console\package-lock.json") -Raw -ErrorAction SilentlyContinue)
+  $SourceHash = Get-StringHash ($pyContent + "`n|||`n" + $consoleContent)
+
+  $CurrentVersion = ""
+  $vf = Join-Path $RepoRoot "src\qwenpaw\__version__.py"
+  if (Test-Path $vf) {
+    if ((Get-Content $vf -Raw) -match '__version__\s*=\s*"([^"]+)"') { $CurrentVersion = $Matches[1] }
+  }
+  $existingWheels = @()
+  if ($CurrentVersion) {
+    $existingWheels = @(Get-ChildItem -Path (Join-Path $RepoRoot "dist\qwenpaw-$CurrentVersion-*.whl") -ErrorAction SilentlyContinue)
+  }
+  if ($CurrentVersion -and (Test-Path $HashMarker) -and $existingWheels.Count -gt 0) {
+    $prevHash = (Get-Content $HashMarker -Raw -ErrorAction SilentlyContinue).Trim()
+    if ($prevHash -eq $SourceHash) {
+      Write-Host "[wheel_build] Source unchanged (hash: $($SourceHash.Substring(0,8))), skipping rebuild."
+      $SkipBuild = $true
+    }
+  }
+} catch {
+  Write-Host "[wheel_build] Source hash check failed ($($_.Exception.Message)); forcing full rebuild."
+  $SkipBuild = $false
+  $SourceHash = $null
+}
+
+if ($SkipBuild) {
+  Write-Host "[wheel_build] Done. Using existing wheel(s) in: $RepoRoot\dist\"
+  exit 0
+}
+
 Write-Host "[wheel_build] Building console frontend..."
 # vite build with ~15k modules exhausts Node's default ~2GB heap on Windows.
 # Lift to 8GB so the production bundle doesn't OOM.
@@ -94,5 +150,8 @@ Get-ChildItem -Path $DistDir -File -ErrorAction SilentlyContinue | Where-Object 
 } | Remove-Item -Force -ErrorAction SilentlyContinue
 & $PythonCmd -m build --outdir dist .
 if ($LASTEXITCODE -ne 0) { throw "$PythonCmd -m build failed with exit code $LASTEXITCODE" }
+
+# Save source hash for future cache checks
+if ($SourceHash) { Set-Content -Path $HashMarker -Value $SourceHash -NoNewline }
 
 Write-Host "[wheel_build] Done. Wheel(s) in: $RepoRoot\dist\"

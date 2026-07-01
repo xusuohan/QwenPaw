@@ -24,7 +24,10 @@ ARCH="$(uname -m)"
 _profiler start wheel_build --platform "macOS-${ARCH}" --python-version "3.10"
 
 echo "== Building wheel (includes console frontend) =="
-# Skip wheel_build if dist already has a wheel for current version
+# Detect version (used later for Info.plist). Always invoke wheel_build.sh,
+# which decides via its own source-content hash whether to rebuild — a
+# version-only check here would reuse a stale wheel when source changes
+# without a version bump.
 VERSION_FILE="${REPO_ROOT}/src/qwenpaw/__version__.py"
 CURRENT_VERSION=""
 if [[ -f "${VERSION_FILE}" ]]; then
@@ -33,23 +36,7 @@ if [[ -f "${VERSION_FILE}" ]]; then
       "${VERSION_FILE}" 2>/dev/null
   )"
 fi
-if [[ -n "${CURRENT_VERSION}" ]]; then
-  shopt -s nullglob
-  whls=("${REPO_ROOT}/dist/qwenpaw-${CURRENT_VERSION}-"*.whl)
-  if [[ ${#whls[@]} -gt 0 ]]; then
-    echo "dist/ already has wheel for version ${CURRENT_VERSION}, skipping."
-  else
-    # Clean up old wheels to avoid confusion
-    old_whls=("${REPO_ROOT}/dist/qwenpaw-"*.whl)
-    if [[ ${#old_whls[@]} -gt 0 ]]; then
-      echo "Removing old wheel files: ${old_whls[*]}"
-      rm -f "${old_whls[@]}"
-    fi
-    bash scripts/wheel_build.sh
-  fi
-else
-  bash scripts/wheel_build.sh
-fi
+bash scripts/wheel_build.sh
 
 _profiler end wheel_build
 
