@@ -54,7 +54,7 @@ def resolve_workspace_dst(
     that ``str(dst)`` is always canonical regardless of which branch is taken.
     """
     if ref is not None:
-        dst = Path(ref.workspace_dir).expanduser()
+        dst = ref.workspace_dir_abs
         if dst.exists():
             return dst.resolve(), False
         # Existing agent in config but local path is absent (cross-machine

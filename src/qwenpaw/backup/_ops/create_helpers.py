@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 import zipfile
-from pathlib import Path
 from typing import Any
 
 from .._utils.constants import (
@@ -43,7 +42,7 @@ def add_agent_workspaces(
         if progress_callback:
             progress_callback(i, total, aid)
 
-        ws = Path(ref.workspace_dir).expanduser().resolve()
+        ws = ref.workspace_dir_abs.resolve()
         if ws.is_dir():
             file_count = 0
             for entry in sorted(ws.rglob("*")):

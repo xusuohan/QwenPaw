@@ -36,7 +36,7 @@ def _get_agent_workspace(agent_id: str) -> Path:
         config = load_config()
         if agent_id in config.agents.profiles:
             ref = config.agents.profiles[agent_id]
-            workspace_dir = Path(ref.workspace_dir).expanduser()
+            workspace_dir = ref.workspace_dir_abs
             return workspace_dir
     except Exception:
         pass

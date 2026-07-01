@@ -986,6 +986,19 @@ class AgentProfileRef(BaseModel):
         description="Whether agent is enabled (controls instance loading)",
     )
 
+    @property
+    def workspace_dir_abs(self) -> Path:
+        """Absolute workspace Path, anchored to WORKING_DIR.
+
+        ``workspace_dir`` stores a portable (possibly relative) value so
+        config.json stays relocatable; always use this property for
+        filesystem access. Relative paths resolve against WORKING_DIR,
+        matching ``resolve_workspace_path()``.
+        """
+        from .utils import resolve_workspace_path
+
+        return resolve_workspace_path(self.workspace_dir)
+
 
 class PlanConfig(BaseModel):
     """Plan mode configuration (stored in agent.json)."""
@@ -1009,6 +1022,18 @@ class AgentProfileConfig(BaseModel):
         default="",
         description="Path to agent's workspace (optional, for reference)",
     )
+
+    @property
+    def workspace_dir_abs(self) -> Path:
+        """Absolute workspace Path, anchored to WORKING_DIR.
+
+        See ``AgentProfileRef.workspace_dir_abs``. Returns WORKING_DIR itself
+        when ``workspace_dir`` is empty.
+        """
+        from .utils import resolve_workspace_path
+
+        return resolve_workspace_path(self.workspace_dir)
+
     template_id: Optional[str] = Field(
         default=None,
         description="Builtin template used when this agent was created",

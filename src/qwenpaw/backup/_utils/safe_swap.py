@@ -200,7 +200,7 @@ def _startup_restore_targets() -> list[Path]:
     ]
     config = load_config(get_config_path())
     for profile in config.agents.profiles.values():
-        targets.append(Path(profile.workspace_dir).expanduser())
+        targets.append(profile.workspace_dir_abs)
     return _dedupe_paths(targets)
 
 

@@ -6,7 +6,6 @@ This module handles system commands like /compact, /new, /clear, etc.
 
 import json
 import logging
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from agentscope.message import Msg, TextBlock
@@ -410,7 +409,7 @@ class CommandHandler(ConversationCommandHandlerMixin):
             System message with dump result
         """
         agent_config = self._get_agent_config()
-        history_file = Path(agent_config.workspace_dir) / DEBUG_HISTORY_FILE
+        history_file = agent_config.workspace_dir_abs / DEBUG_HISTORY_FILE
 
         try:
             # Check if there's a compressed summary
@@ -466,7 +465,7 @@ class CommandHandler(ConversationCommandHandlerMixin):
             System message with load result
         """
         agent_config = self._get_agent_config()
-        history_file = Path(agent_config.workspace_dir) / DEBUG_HISTORY_FILE
+        history_file = agent_config.workspace_dir_abs / DEBUG_HISTORY_FILE
 
         if not history_file.exists():
             return await self._make_system_msg(
