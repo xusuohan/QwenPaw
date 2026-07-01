@@ -366,7 +366,7 @@ def _plan_fixes(
 
     if cfg is not None and "ensure-workspace-dirs" in fix_ids:
         for agent_id, ref in cfg.agents.profiles.items():
-            wsp = Path(ref.workspace_dir).expanduser()
+            wsp = ref.workspace_dir_abs
             if not workspace_under_working_dir(wsp, wd):
                 continue
             if wsp.is_dir():
@@ -390,7 +390,7 @@ def _plan_fixes(
     if cfg is not None and "seed-missing-agent-json" in fix_ids:
         for agent_id in cfg.agents.profiles:
             ref = cfg.agents.profiles[agent_id]
-            wsp = Path(ref.workspace_dir).expanduser()
+            wsp = ref.workspace_dir_abs
             if not workspace_under_working_dir(wsp, wd):
                 continue
             agent_json = wsp / "agent.json"
@@ -427,7 +427,7 @@ def _plan_fixes(
     if cfg is not None and "reset-invalid-agent-json" in fix_ids:
         for agent_id in cfg.agents.profiles:
             ref = cfg.agents.profiles[agent_id]
-            wsp = Path(ref.workspace_dir).expanduser()
+            wsp = ref.workspace_dir_abs
             if not workspace_under_working_dir(wsp, wd):
                 continue
             if not wsp.is_dir():
@@ -470,7 +470,7 @@ def _plan_fixes(
 
         for agent_id in cfg.agents.profiles:
             ref = cfg.agents.profiles[agent_id]
-            wsp = Path(ref.workspace_dir).expanduser()
+            wsp = ref.workspace_dir_abs
             if not workspace_under_working_dir(wsp, wd):
                 continue
             jp = wsp / JOBS_FILE
@@ -501,7 +501,7 @@ def _plan_fixes(
 
     if cfg is not None and "reconcile-workspace-skills" in fix_ids:
         for agent_id, ref in cfg.agents.profiles.items():
-            wsp = Path(ref.workspace_dir).expanduser()
+            wsp = ref.workspace_dir_abs
             if not workspace_under_working_dir(wsp, wd):
                 continue
             if not wsp.is_dir():
@@ -526,7 +526,7 @@ def _plan_fixes(
 
     if cfg is not None and "normalize-jobs-cron" in fix_ids:
         for agent_id, ref in cfg.agents.profiles.items():
-            wsp = Path(ref.workspace_dir).expanduser()
+            wsp = ref.workspace_dir_abs
             if not workspace_under_working_dir(wsp, wd):
                 continue
             if not wsp.is_dir():

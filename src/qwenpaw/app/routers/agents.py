@@ -186,7 +186,7 @@ async def list_agents() -> AgentListResponse:
                     id=agent_id,
                     name=agent_config.name,
                     description=description,
-                    workspace_dir=agent_ref.workspace_dir,
+                    workspace_dir=str(agent_ref.workspace_dir_abs),
                     enabled=getattr(agent_ref, "enabled", True),
                     active_model=active_model,
                 ),
@@ -197,7 +197,7 @@ async def list_agents() -> AgentListResponse:
                     id=agent_id,
                     name=agent_id.title(),
                     description="",
-                    workspace_dir=agent_ref.workspace_dir,
+                    workspace_dir=str(agent_ref.workspace_dir_abs),
                     enabled=getattr(agent_ref, "enabled", True),
                 ),
             )

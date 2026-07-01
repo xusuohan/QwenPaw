@@ -35,6 +35,69 @@ CONDA_UNPACK_AFFECTED_PACKAGES = [
 ]
 
 
+# --- Domestic (CN) mirror configuration -------------------------------------
+# The build pulls conda packages (python, pip, conda-pack, ...) and many PyPI
+# wheels. Default to Tsinghua TUNA mirrors so builds work reliably on domestic
+# networks. Set QWENPAW_CN_MIRROR=0 to fall back to upstream conda/pypi.
+# Override pip only via QWENPAW_PIP_INDEX_URL / QWENPAW_PIP_TRUSTED_HOST.
+_CN_CONDARC = """\
+channels:
+  - defaults
+show_channel_urls: true
+default_channels:
+  - https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/main
+  - https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/r
+  - https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/msys2
+custom_channels:
+  conda-forge: https://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud
+ssl_verify: true
+"""
+_CN_PIP_INDEX_URL = "https://pypi.tuna.tsinghua.edu.cn/simple"
+
+# Resolved once in main(); _run() injects it as CONDARC for every command so
+# conda create/install always use the domestic channels.
+_CONDARC_PATH: Path | None = None
+
+
+def _cn_mirror_enabled() -> bool:
+    """Whether domestic mirrors are active (on by default)."""
+    return os.environ.get("QWENPAW_CN_MIRROR", "1").lower() not in (
+        "0",
+        "false",
+        "no",
+        "",
+    )
+
+
+def _ensure_condarc() -> Path | None:
+    """Write the CN .condarc into .cache; return its path (None if disabled).
+
+    CONDARC is set to this file for every conda invocation, overriding the
+    user's ~/.condarc so the build is self-contained and reproducible.
+    """
+    if not _cn_mirror_enabled():
+        return None
+    cache_dir = REPO_ROOT / ".cache"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    path = cache_dir / "condarc.cn.yml"
+    path.write_text(_CN_CONDARC, encoding="utf-8")
+    return path
+
+
+def _pip_index_args() -> list[str]:
+    """pip --index-url/--trusted-host args (TUNA by default, overridable)."""
+    args: list[str] = []
+    index_url = os.environ.get("QWENPAW_PIP_INDEX_URL")
+    if _cn_mirror_enabled() and not index_url:
+        index_url = _CN_PIP_INDEX_URL
+    if index_url:
+        args += ["--index-url", index_url]
+    trusted_host = os.environ.get("QWENPAW_PIP_TRUSTED_HOST")
+    if trusted_host:
+        args += ["--trusted-host", trusted_host]
+    return args
+
+
 def _conda_exe() -> str:
     """Resolve conda executable (required on Windows where 'conda' is a batch)."""
     exe = os.environ.get("CONDA_EXE")
@@ -58,6 +121,9 @@ def _run(
     run_env = os.environ.copy()
     if env:
         run_env.update(env)
+    # Force domestic conda channels for every invocation (set in main()).
+    if _CONDARC_PATH is not None:
+        run_env["CONDARC"] = str(_CONDARC_PATH)
     # Windows: conda/pip are batch/cmd files, need shell=True to resolve
     use_shell = sys.platform == "win32"
     subprocess.run(
@@ -180,6 +246,17 @@ def main() -> int:
         help="Path to write build profiling JSON report",
     )
     args = parser.parse_args()
+
+    # Resolve once so every _run() injects it as CONDARC. Also prints which
+    # conda source is in effect for build transparency.
+    global _CONDARC_PATH
+    _CONDARC_PATH = _ensure_condarc()
+    if _CONDARC_PATH is not None:
+        print(
+            f"Using domestic conda mirror (CONDARC={_CONDARC_PATH}). "
+            f"Set QWENPAW_CN_MIRROR=0 to disable."
+        )
+
     out_path = Path(args.output).resolve()
     out_path.parent.mkdir(parents=True, exist_ok=True)
     wheel_path = _pick_wheel(args.wheel)
@@ -236,22 +313,11 @@ def main() -> int:
                 # Prevent pip from installing to user site-packages
                 install_env["PYTHONNOUSERSITE"] = "1"
 
-                # Optional mirror support: set QWENPAW_PIP_INDEX_URL to use a
-                # non-default index (e.g. tsinghua mirror when SSL to pypi.org
-                # is being interfered with). QWENPAW_PIP_TRUSTED_HOST avoids
-                # certificate verification failures on hijacked networks.
-                extra_pip_args = []
-                index_url = os.environ.get("QWENPAW_PIP_INDEX_URL")
-                trusted_host = os.environ.get("QWENPAW_PIP_TRUSTED_HOST")
-                if index_url:
-                    extra_pip_args += ["--index-url", index_url]
-                if trusted_host:
-                    extra_pip_args += ["--trusted-host", trusted_host]
+                # Domestic mirror by default (TUNA); overridable via
+                # QWENPAW_PIP_INDEX_URL / QWENPAW_PIP_TRUSTED_HOST.
+                extra_pip_args = _pip_index_args()
                 if extra_pip_args:
-                    print(
-                        f"Using pip mirror: index_url={index_url or '(default)'} "
-                        f"trusted_host={trusted_host or '(none)'}"
-                    )
+                    print(f"Using pip mirror args: {extra_pip_args}")
 
                 pip_cmd = [
                     conda,
@@ -354,6 +420,7 @@ def main() -> int:
                         "pip",
                         "download",
                         *CONDA_UNPACK_AFFECTED_PACKAGES,
+                        *_pip_index_args(),
                         "-d",
                         str(wheels_cache),
                     ],

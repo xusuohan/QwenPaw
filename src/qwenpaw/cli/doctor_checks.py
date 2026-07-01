@@ -128,7 +128,7 @@ def check_agent_workspace_writable(cfg: Config) -> tuple[bool, str]:
     problems: list[str] = []
     checked = 0
     for agent_id, ref in cfg.agents.profiles.items():
-        wd = Path(ref.workspace_dir).expanduser()
+        wd = ref.workspace_dir_abs
         if not wd.is_dir():
             continue
         checked += 1
@@ -165,7 +165,7 @@ def startup_extra_volume_disk_notes(cfg: Config | None) -> list[str]:
     consider(SECRET_DIR)
     if cfg is not None:
         for ref in cfg.agents.profiles.values():
-            consider(Path(ref.workspace_dir))
+            consider(ref.workspace_dir_abs)
 
     low_gib = 0.5
     for anchor in anchors.values():
@@ -416,7 +416,7 @@ def legacy_single_agent_workspace_note(cfg: Config) -> str | None:
     ref = profiles["default"]
     if not isinstance(ref, AgentProfileRef):
         return None
-    agent_json = Path(ref.workspace_dir).expanduser() / "agent.json"
+    agent_json = ref.workspace_dir_abs / "agent.json"
     if agent_json.is_file():
         return None
     return (
@@ -432,7 +432,7 @@ def check_agent_profile_workspaces(cfg: Config) -> tuple[bool, str]:
     """Each profile needs a workspace dir and ``agent.json``."""
     problems: list[str] = []
     for agent_id, ref in cfg.agents.profiles.items():
-        wd = Path(ref.workspace_dir).expanduser()
+        wd = ref.workspace_dir_abs
         if not wd.is_dir():
             problems.append(
                 f"{agent_id}: workspace_dir is not a directory: {wd}",
@@ -465,7 +465,7 @@ def check_cron_jobs_files(cfg: Config) -> tuple[bool, str]:
     validated_paths: list[tuple[str, Path, int]] = []
 
     for agent_id, ref in cfg.agents.profiles.items():
-        path = Path(ref.workspace_dir).expanduser() / JOBS_FILE
+        path = ref.workspace_dir_abs / JOBS_FILE
         if not path.is_file():
             continue
         try:
@@ -604,7 +604,7 @@ def browser_automation_notes(cfg: Config | None) -> list[str]:
 
     if cfg is not None:
         for agent_id, ref in cfg.agents.profiles.items():
-            ws = Path(ref.workspace_dir).expanduser()
+            ws = ref.workspace_dir_abs
             ud = ws / "browser" / "user_data"
             try:
                 if ud.is_file():
@@ -689,7 +689,7 @@ def workspace_hygiene_notes(cfg: Config) -> list[str]:
         HEARTBEAT_FILE,
     )
     for agent_id, ref in cfg.agents.profiles.items():
-        wd = Path(ref.workspace_dir).expanduser()
+        wd = ref.workspace_dir_abs
         if not wd.is_dir():
             continue
         for name in bootstrap_names:
@@ -757,7 +757,7 @@ def workspace_hygiene_notes(cfg: Config) -> list[str]:
 
 
 def _read_workspace_agent_json(ref: AgentProfileRef) -> dict[str, Any] | None:
-    path = Path(ref.workspace_dir).expanduser() / "agent.json"
+    path = ref.workspace_dir_abs / "agent.json"
     if not path.is_file():
         return None
     try:
@@ -774,7 +774,7 @@ def check_agent_json_profiles(cfg: Config) -> tuple[bool, str]:
     problems: list[str] = []
     n_ok = 0
     for agent_id, ref in cfg.agents.profiles.items():
-        path = Path(ref.workspace_dir).expanduser() / "agent.json"
+        path = ref.workspace_dir_abs / "agent.json"
         if not path.is_file():
             continue
         raw = _read_workspace_agent_json(ref)
@@ -808,7 +808,7 @@ def check_enabled_agents_load_agent_config(cfg: Config) -> tuple[bool, str]:
         if not getattr(ref, "enabled", True):
             continue
         enabled_n += 1
-        ws = Path(ref.workspace_dir).expanduser()
+        ws = ref.workspace_dir_abs
         path = ws / "agent.json"
         if not path.is_file():
             problems.append(
@@ -1047,7 +1047,7 @@ def skill_layout_notes(cfg: Config) -> list[str]:
     """Enabled skills in skill.json vs on-disk workspace directories."""
     notes: list[str] = []
     for agent_id, ref in cfg.agents.profiles.items():
-        wd = Path(ref.workspace_dir).expanduser()
+        wd = ref.workspace_dir_abs
         if not wd.is_dir():
             continue
         manifest = read_skill_manifest(wd)

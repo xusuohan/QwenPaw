@@ -102,7 +102,7 @@ def _plan_agent_destinations(
         if aid in restore_set:
             continue
         try:
-            p = Path(ref.workspace_dir).expanduser().resolve()
+            p = ref.workspace_dir_abs.resolve()
             other_workspace_paths.add(p)
         except Exception:
             pass

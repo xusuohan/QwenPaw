@@ -100,7 +100,7 @@ async def _run_task(
 
     base_workspace: Path | None = None
     if agent_config.workspace_dir:
-        base_workspace = Path(agent_config.workspace_dir).expanduser()
+        base_workspace = agent_config.workspace_dir_abs
 
     with _isolated_skills_workspace(skills_dir, base_workspace) as workspace:
         agent = QwenPawAgent(
