@@ -22,7 +22,7 @@ from acp import (
     LoadSessionResponse,
     NewSessionResponse,
     PromptResponse,
-    SetSessionModelResponse,
+    SetSessionModeResponse,
     run_agent,
     start_tool_call,
     text_block,
@@ -661,31 +661,31 @@ class QwenPawACPAgent(Agent):
             self._sessions[session_id]["cwd"] = cwd
         return ResumeSessionResponse()
 
-    async def set_session_model(  # pylint: disable=unused-argument
+    async def set_session_mode(  # pylint: disable=unused-argument
         self,
-        model_id: str,
         session_id: str,
+        mode_id: str,
         **kwargs: Any,
-    ) -> SetSessionModelResponse | None:
+    ) -> SetSessionModeResponse | None:
         logger.info(
-            "ACP set_session_model: session=%s model=%s",
+            "ACP set_session_mode: session=%s mode=%s",
             session_id,
-            model_id,
+            mode_id,
         )
         try:
-            await self._switch_model(model_id)
+            await self._switch_model(mode_id)
         except Exception:
             logger.exception(
                 "Failed to switch model to %s",
-                model_id,
+                mode_id,
             )
             return None
         logger.info(
             "Model switched to %s for agent %s",
-            model_id,
+            mode_id,
             self._resolve_agent_id(),
         )
-        return SetSessionModelResponse()
+        return SetSessionModeResponse()
 
     async def set_config_option(  # pylint: disable=unused-argument
         self,

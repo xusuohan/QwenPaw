@@ -33,7 +33,10 @@ dependencies = [
     "segno>=1.6.6",
     "huggingface_hub>=0.20.0",
     "pillow>=10.0.0",
-    "agent-client-protocol>=0.9.0",
+    # acp 0.11.0 renamed SetSessionModelResponse -> SetSessionModeResponse and
+    # set_session_model -> set_session_mode. Future renames are likely; cap the
+    # major and re-verify before bumping.
+    "agent-client-protocol>=0.11.0,<0.12",
     "openai>=2.0.0,<=2.33.0",
     # anyio 4.13.0: _deliver_cancellation busy-loop / getpid storm (QwenPaw#2632)
     "anyio>=4.0.0,<4.13.0",
