@@ -198,12 +198,12 @@ def _create_win_job_object() -> Any | None:
 
         class IO_COUNTERS(ctypes.Structure):
             _fields_ = [
-                ("ReadOperationCount", wintypes.ULONGLONG),
-                ("WriteOperationCount", wintypes.ULONGLONG),
-                ("OtherOperationCount", wintypes.ULONGLONG),
-                ("ReadTransferCount", wintypes.ULONGLONG),
-                ("WriteTransferCount", wintypes.ULONGLONG),
-                ("OtherTransferCount", wintypes.ULONGLONG),
+                ("ReadOperationCount", ctypes.c_ulonglong),
+                ("WriteOperationCount", ctypes.c_ulonglong),
+                ("OtherOperationCount", ctypes.c_ulonglong),
+                ("ReadTransferCount", ctypes.c_ulonglong),
+                ("WriteTransferCount", ctypes.c_ulonglong),
+                ("OtherTransferCount", ctypes.c_ulonglong),
             ]
 
         class JOBOBJECT_EXTENDED_LIMIT_INFORMATION(ctypes.Structure):
