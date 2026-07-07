@@ -214,6 +214,8 @@ QwenPaw 旨在在 **Windows**、**Linux** 和 **macOS** 上运行。欢迎改进
 - 从小的、集中的更改开始。
 - 在 issue 中首先讨论大型或涉及敏感的更改。
 - 在适用的地方编写或更新测试。
+- **修改 `pyproject.toml` 中的依赖后**，请重新生成桌面打包锁文件以保持发行二进制可复现：
+  `make lock-deps`（写入 `requirements/pinned.txt`，详见 `scripts/pack/README.md`）。锁文件过期或缺失时，桌面打包会直接报错中止。
 - 为面向用户的更改更新文档。
 - 使用常规提交消息和 PR 标题。
 - 保持尊重和建设性（我们遵循友好的行为准则）。

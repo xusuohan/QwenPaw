@@ -212,6 +212,9 @@ If you add or change platform support, please test on the affected OS and mentio
 - Start with small, focused changes.
 - Discuss large or design-sensitive changes in an issue first.
 - Write or update tests where applicable.
+- **When you change dependencies in `pyproject.toml`**, regenerate the desktop-build lock so
+  packed binaries stay reproducible: `make lock-deps` (writes `requirements/pinned.txt`; see
+  `scripts/pack/README.md`). The desktop build fails fast if the lock is stale or missing.
 - Update documentation for user-facing changes.
 - Use conventional commit messages and PR titles.
 - Be respectful and constructive (we follow a welcoming Code of Conduct).

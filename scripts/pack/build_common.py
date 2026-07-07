@@ -175,6 +175,13 @@ def _compute_deps_hash(python_version: str) -> str:
             h.update(f"{key}={sorted(extras[key])}".encode())
     except ModuleNotFoundError:
         h.update(text.encode())
+    # Fold the dependency lock (requirements/pinned.txt) into the hash so regenerating it
+    # (new pinned versions) invalidates the env cache. Without this a stale env holding the
+    # old versions would be reused despite the new lock, defeating the lock entirely.
+    # See scripts/pack/lock_deps.sh.
+    lockfile = REPO_ROOT / "requirements" / "pinned.txt"
+    if lockfile.exists():
+        h.update(lockfile.read_bytes())
     return h.hexdigest()[:16]
 
 
@@ -344,6 +351,33 @@ def main() -> int:
                 if extra_pip_args:
                     print(f"Using pip mirror args: {extra_pip_args}")
 
+                # Apply the dependency lock so every build resolves the exact same versions —
+                # no drift from pip resolving the `>=` ranges in pyproject.toml at install time.
+                # Fail fast if the lock is missing: a silent fallback to fresh resolution would
+                # reintroduce the very drift the lock exists to prevent. Bypass with
+                # QWENPAW_PACK_NO_LOCK=1 only in an emergency.
+                lockfile = REPO_ROOT / "requirements" / "pinned.txt"
+                if lockfile.exists():
+                    constraint_args = ["--constraint", str(lockfile.resolve())]
+                    print(f"Applying dependency lock: {lockfile}")
+                elif os.environ.get("QWENPAW_PACK_NO_LOCK", "").lower() in (
+                    "1",
+                    "true",
+                    "yes",
+                ):
+                    constraint_args = []
+                    print(
+                        "WARNING: QWENPAW_PACK_NO_LOCK set — building WITHOUT the dependency "
+                        "lock; pip will resolve the latest compatible versions (version drift)."
+                    )
+                else:
+                    raise FileNotFoundError(
+                        "Dependency lock requirements/pinned.txt not found. The desktop build "
+                        "refuses to run without it to prevent version drift. Regenerate with: "
+                        "bash scripts/pack/lock_deps.sh  (or: make lock-deps). "
+                        "Set QWENPAW_PACK_NO_LOCK=1 to bypass in an emergency."
+                    )
+
                 pip_cmd = [
                     conda,
                     "run",
@@ -358,6 +392,7 @@ def main() -> int:
                     "--timeout",
                     "120",
                     *extra_pip_args,
+                    *constraint_args,
                     f"qwenpaw[full] @ {wheel_uri}",
                 ]
                 _max_retries = 2

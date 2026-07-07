@@ -1,0 +1,917 @@
+# Dependency lock for the desktop/conda-pack build (scripts/pack/build_common.py).
+# Pins qwenpaw[full] -- direct + transitive -- to exact versions for reproducible binaries.
+# qwenpaw itself is excluded: it is installed from a freshly built wheel, whose version
+# comes from src/qwenpaw/__version__.py and bumps independently of this lock.
+#
+# Regenerate after changing any dependency in pyproject.toml:
+#     bash scripts/pack/lock_deps.sh        # or:  make lock-deps
+a2a-sdk==0.3.26
+    # via agentscope-runtime
+ag-ui-protocol==0.1.19
+    # via agentscope-runtime
+agent-client-protocol==0.11.0
+    # via qwenpaw
+agentscope==1.0.19.post1
+    # via
+    #   agentscope-runtime
+    #   qwenpaw
+agentscope-runtime==1.1.4
+    # via qwenpaw
+aiofile==3.9.0
+    # via py-key-value-aio
+aiofiles==24.1.0
+    # via
+    #   agentscope
+    #   alibabacloud-credentials
+    #   matrix-nio
+    #   qwenpaw
+aiohappyeyeballs==2.7.1
+    # via aiohttp
+aiohttp==3.14.1
+    # via
+    #   aiohttp-retry
+    #   aiohttp-socks
+    #   alibabacloud-tea
+    #   darabonba-core
+    #   dashscope
+    #   dingtalk-stream
+    #   discord-py
+    #   kubernetes
+    #   matrix-nio
+    #   twilio
+    #   wecom-aibot-python-sdk
+aiohttp-retry==2.9.1
+    # via twilio
+aiohttp-socks==0.11.0
+    # via matrix-nio
+aioitertools==0.13.0
+    # via agentscope
+aiosignal==1.4.0
+    # via aiohttp
+alibabacloud-credentials==1.0.9
+    # via
+    #   alibabacloud-gateway-spi
+    #   alibabacloud-tea-openapi
+alibabacloud-credentials-api==1.0.1
+    # via alibabacloud-credentials
+alibabacloud-dingtalk==2.2.51
+    # via qwenpaw
+alibabacloud-endpoint-util==0.0.4
+    # via alibabacloud-dingtalk
+alibabacloud-gateway-dingtalk==1.0.2
+    # via alibabacloud-dingtalk
+alibabacloud-gateway-spi==0.0.4
+    # via
+    #   alibabacloud-dingtalk
+    #   alibabacloud-gateway-dingtalk
+    #   alibabacloud-tea-openapi
+alibabacloud-openapi-util==0.2.4
+    # via alibabacloud-dingtalk
+alibabacloud-tea==0.4.3
+    # via
+    #   alibabacloud-credentials
+    #   alibabacloud-tea-util
+    #   darabonba-core
+alibabacloud-tea-openapi==0.4.4
+    # via
+    #   alibabacloud-dingtalk
+    #   qwenpaw
+alibabacloud-tea-util==0.3.14
+    # via
+    #   alibabacloud-dingtalk
+    #   alibabacloud-gateway-dingtalk
+    #   alibabacloud-openapi-util
+    #   alibabacloud-tea-openapi
+aliyun-python-sdk-core==2.16.0
+    # via
+    #   aliyun-python-sdk-kms
+    #   oss2
+aliyun-python-sdk-kms==2.16.5
+    # via oss2
+amqp==5.3.1
+    # via kombu
+annotated-doc==0.0.4
+    # via
+    #   fastapi
+    #   typer
+annotated-types==0.7.0
+    # via pydantic
+anthropic==0.116.0
+    # via agentscope
+anyio==4.12.1
+    # via
+    #   anthropic
+    #   elasticsearch
+    #   google-genai
+    #   httpx
+    #   mcp
+    #   openai
+    #   py-key-value-aio
+    #   qwenpaw
+    #   sse-starlette
+    #   starlette
+    #   watchfiles
+apscheduler==3.11.3
+    # via
+    #   alibabacloud-credentials
+    #   qwenpaw
+asgiref==3.11.1
+    # via agentscope-runtime
+async-timeout==5.0.1
+    # via
+    #   aiohttp
+    #   asyncpg
+    #   python-socks
+    #   redis
+asyncpg==0.31.0
+    # via reme-ai
+attrs==26.1.0
+    # via
+    #   aiohttp
+    #   cyclopts
+    #   jsonschema
+    #   jsonschema-path
+    #   referencing
+authlib==1.7.2
+    # via fastmcp-slim
+backports-tarfile==1.2.0
+    # via jaraco-context
+bcrypt==5.0.0
+    # via chromadb
+beartype==0.22.9
+    # via py-key-value-aio
+bidict==0.23.1
+    # via python-socketio
+billiard==4.2.4
+    # via celery
+bottle==0.13.4
+    # via pywebview
+build==1.5.0
+    # via chromadb
+cached-property==2.0.1
+    # via python-datauri
+cachetools==7.1.4
+    # via py-key-value-aio
+caio==0.9.25
+    # via aiofile
+celery==5.6.3
+    # via agentscope-runtime
+certifi==2026.6.17
+    # via
+    #   dashscope
+    #   elastic-transport
+    #   httpcore
+    #   httpx
+    #   kubernetes
+    #   requests
+    #   wecom-aibot-python-sdk
+cffi==2.1.0
+    # via
+    #   cryptography
+    #   sounddevice
+charset-normalizer==3.4.8
+    # via requests
+chromadb==1.5.9
+    # via reme-ai
+click==8.4.2
+    # via
+    #   agentscope-runtime
+    #   celery
+    #   click-didyoumean
+    #   click-plugins
+    #   click-repl
+    #   huggingface-hub
+    #   uvicorn
+click-didyoumean==0.3.1
+    # via celery
+click-plugins==1.1.1.2
+    # via celery
+click-repl==0.3.0
+    # via celery
+coloredlogs==15.0.1
+    # via onnxruntime
+crcmod==1.7
+    # via oss2
+cryptography==46.0.7
+    # via
+    #   alibabacloud-openapi-util
+    #   alibabacloud-tea-openapi
+    #   aliyun-python-sdk-core
+    #   authlib
+    #   dashscope
+    #   google-auth
+    #   joserfc
+    #   pyjwt
+    #   qwenpaw
+    #   wecom-aibot-python-sdk
+cyclopts==4.20.0
+    # via fastmcp-slim
+darabonba-core==1.0.7
+    # via alibabacloud-tea-openapi
+dashscope==1.26.2
+    # via
+    #   agentscope
+    #   agentscope-runtime
+    #   reme-ai
+dingtalk-stream==0.24.3
+    # via qwenpaw
+discord-py==2.7.1
+    # via qwenpaw
+distro==1.9.0
+    # via
+    #   anthropic
+    #   google-genai
+    #   openai
+dnspython==2.8.0
+    # via email-validator
+docker==7.1.0
+    # via agentscope-runtime
+docstring-parser==0.18.0
+    # via
+    #   agentscope
+    #   anthropic
+    #   cyclopts
+durationpy==0.10
+    # via kubernetes
+elastic-transport==9.4.2
+    # via elasticsearch
+elasticsearch==9.4.1
+    # via reme-ai
+email-validator==2.3.0
+    # via pydantic
+exceptiongroup==1.3.1
+    # via
+    #   anyio
+    #   celery
+    #   fastmcp-slim
+fastapi==0.139.0
+    # via
+    #   agentscope-runtime
+    #   reme-ai
+fastmcp==3.4.3
+    # via reme-ai
+fastmcp-slim==3.4.3
+    # via fastmcp
+filelock==3.29.6
+    # via huggingface-hub
+filetype==1.2.0
+    # via agentscope
+flatbuffers==25.12.19
+    # via onnxruntime
+frozenlist==1.8.0
+    # via
+    #   aiohttp
+    #   aiosignal
+fsspec==2026.6.0
+    # via huggingface-hub
+google-api-core==2.31.0
+    # via a2a-sdk
+google-auth==2.55.1
+    # via
+    #   google-api-core
+    #   google-genai
+google-genai==2.10.0
+    # via qwenpaw
+googleapis-common-protos==1.75.0
+    # via
+    #   google-api-core
+    #   opentelemetry-exporter-otlp-proto-grpc
+    #   opentelemetry-exporter-otlp-proto-http
+greenlet==3.5.3
+    # via
+    #   playwright
+    #   sqlalchemy
+griffelib==2.1.0
+    # via fastmcp-slim
+grpcio==1.82.0
+    # via
+    #   chromadb
+    #   opentelemetry-exporter-otlp-proto-grpc
+    #   qdrant-client
+h11==0.16.0
+    # via
+    #   httpcore
+    #   matrix-nio
+    #   uvicorn
+    #   wsproto
+h2==4.3.0
+    # via
+    #   httpx
+    #   matrix-nio
+hf-xet==1.5.1
+    # via huggingface-hub
+hpack==4.2.0
+    # via h2
+httpcore==1.0.9
+    # via httpx
+httptools==0.8.0
+    # via uvicorn
+httpx==0.28.1
+    # via
+    #   a2a-sdk
+    #   anthropic
+    #   chromadb
+    #   dashscope
+    #   fastmcp-slim
+    #   google-genai
+    #   huggingface-hub
+    #   lark-oapi
+    #   mcp
+    #   openai
+    #   python-telegram-bot
+    #   qdrant-client
+    #   qwenpaw
+    #   reme-ai
+    #   tavily-python
+httpx-sse==0.4.3
+    # via
+    #   a2a-sdk
+    #   dashscope
+    #   mcp
+huggingface-hub==1.22.0
+    # via
+    #   qwenpaw
+    #   tokenizers
+    #   transformers
+humanfriendly==10.0
+    # via coloredlogs
+hyperframe==6.1.0
+    # via h2
+idna==3.18
+    # via
+    #   anyio
+    #   email-validator
+    #   httpx
+    #   requests
+    #   yarl
+importlib-metadata==9.0.0
+    # via
+    #   build
+    #   keyring
+importlib-resources==7.1.0
+    # via chromadb
+jaraco-classes==3.4.0
+    # via keyring
+jaraco-context==6.1.2
+    # via keyring
+jaraco-functools==4.5.0
+    # via keyring
+jinja2==3.1.6
+    # via agentscope-runtime
+jiter==0.16.0
+    # via
+    #   anthropic
+    #   openai
+jmespath==0.10.0
+    # via aliyun-python-sdk-core
+joserfc==1.7.2
+    # via
+    #   authlib
+    #   fastmcp-slim
+json-repair==0.61.2
+    # via
+    #   agentscope
+    #   qwenpaw
+json5==0.15.0
+    # via agentscope
+jsonref==1.1.0
+    # via
+    #   agentscope-runtime
+    #   fastmcp-slim
+jsonschema==4.26.0
+    # via
+    #   chromadb
+    #   matrix-nio
+    #   mcp
+jsonschema-path==0.5.0
+    # via fastmcp-slim
+jsonschema-specifications==2025.9.1
+    # via jsonschema
+keyring==25.7.0
+    # via
+    #   py-key-value-aio
+    #   qwenpaw
+kombu==5.6.2
+    # via celery
+kubernetes==36.0.2
+    # via
+    #   agentscope-runtime
+    #   chromadb
+lark-oapi==1.7.0
+    # via qwenpaw
+loguru==0.7.3
+    # via reme-ai
+markdown-it-py==4.2.0
+    # via rich
+markupsafe==3.0.3
+    # via jinja2
+matrix-nio==0.25.2
+    # via qwenpaw
+mcp==1.28.1
+    # via
+    #   agentscope
+    #   agentscope-runtime
+    #   fastmcp-slim
+    #   reme-ai
+mdurl==0.1.2
+    # via markdown-it-py
+mmh3==5.2.1
+    # via chromadb
+more-itertools==11.1.0
+    # via
+    #   jaraco-classes
+    #   jaraco-functools
+mpmath==1.3.0
+    # via sympy
+mss==10.2.0
+    # via qwenpaw
+multidict==6.7.1
+    # via
+    #   aiohttp
+    #   yarl
+numpy==2.2.6
+    # via
+    #   agentscope
+    #   chromadb
+    #   onnxruntime
+    #   pandas
+    #   qdrant-client
+    #   reme-ai
+    #   transformers
+oauthlib==3.3.1
+    # via requests-oauthlib
+onnxruntime==1.23.2
+    # via
+    #   chromadb
+    #   qwenpaw
+openai==2.33.0
+    # via
+    #   agentscope
+    #   agentscope-runtime
+    #   qwenpaw
+    #   reme-ai
+openapi-pydantic==0.5.1
+    # via fastmcp-slim
+opentelemetry-api==1.43.0
+    # via
+    #   agentscope
+    #   chromadb
+    #   fastmcp-slim
+    #   opentelemetry-exporter-otlp-proto-grpc
+    #   opentelemetry-exporter-otlp-proto-http
+    #   opentelemetry-sdk
+    #   opentelemetry-semantic-conventions
+opentelemetry-exporter-otlp==1.43.0
+    # via agentscope
+opentelemetry-exporter-otlp-proto-common==1.43.0
+    # via
+    #   opentelemetry-exporter-otlp-proto-grpc
+    #   opentelemetry-exporter-otlp-proto-http
+opentelemetry-exporter-otlp-proto-grpc==1.43.0
+    # via
+    #   chromadb
+    #   opentelemetry-exporter-otlp
+opentelemetry-exporter-otlp-proto-http==1.43.0
+    # via opentelemetry-exporter-otlp
+opentelemetry-proto==1.43.0
+    # via
+    #   opentelemetry-exporter-otlp-proto-common
+    #   opentelemetry-exporter-otlp-proto-grpc
+    #   opentelemetry-exporter-otlp-proto-http
+opentelemetry-sdk==1.43.0
+    # via
+    #   agentscope
+    #   chromadb
+    #   opentelemetry-exporter-otlp-proto-grpc
+    #   opentelemetry-exporter-otlp-proto-http
+opentelemetry-semantic-conventions==0.64b0
+    # via
+    #   agentscope
+    #   opentelemetry-sdk
+orjson==3.11.9
+    # via chromadb
+oss2==2.19.1
+    # via agentscope-runtime
+overrides==7.7.0
+    # via chromadb
+packaging==26.2
+    # via
+    #   build
+    #   fastmcp-slim
+    #   huggingface-hub
+    #   kombu
+    #   onnxruntime
+    #   qwenpaw
+    #   transformers
+paho-mqtt==2.1.0
+    # via qwenpaw
+pandas==2.3.3
+    # via reme-ai
+pathable==0.6.0
+    # via jsonschema-path
+pillow==12.3.0
+    # via qwenpaw
+platformdirs==4.10.0
+    # via fastmcp-slim
+playwright==1.61.0
+    # via qwenpaw
+portalocker==3.2.0
+    # via qdrant-client
+prompt-toolkit==3.0.52
+    # via
+    #   click-repl
+    #   questionary
+    #   reme-ai
+propcache==0.5.2
+    # via
+    #   aiohttp
+    #   yarl
+proto-plus==1.28.0
+    # via google-api-core
+protobuf==7.35.1
+    # via
+    #   a2a-sdk
+    #   google-api-core
+    #   googleapis-common-protos
+    #   onnxruntime
+    #   opentelemetry-proto
+    #   proto-plus
+    #   qdrant-client
+proxy-tools==0.1.0
+    # via pywebview
+psutil==7.2.2
+    # via agentscope-runtime
+py-key-value-aio==0.4.5
+    # via fastmcp-slim
+pyasn1==0.6.3
+    # via pyasn1-modules
+pyasn1-modules==0.4.2
+    # via google-auth
+pybase64==1.4.3
+    # via chromadb
+pycparser==3.0
+    # via cffi
+pycryptodome==3.23.0
+    # via
+    #   lark-oapi
+    #   matrix-nio
+    #   oss2
+pydantic==2.13.4
+    # via
+    #   a2a-sdk
+    #   ag-ui-protocol
+    #   agent-client-protocol
+    #   agentscope-runtime
+    #   anthropic
+    #   chromadb
+    #   fastapi
+    #   fastmcp-slim
+    #   google-genai
+    #   mcp
+    #   openai
+    #   openapi-pydantic
+    #   pydantic-settings
+    #   qdrant-client
+    #   reme-ai
+pydantic-core==2.46.4
+    # via pydantic
+pydantic-settings==2.14.2
+    # via
+    #   agentscope-runtime
+    #   chromadb
+    #   fastmcp-slim
+    #   mcp
+pyee==13.0.1
+    # via
+    #   playwright
+    #   wecom-aibot-python-sdk
+pygments==2.20.0
+    # via
+    #   rich
+    #   rich-rst
+pyjwt==2.13.0
+    # via
+    #   mcp
+    #   twilio
+pyobjc-core==12.2.1
+    # via
+    #   pyobjc-framework-cocoa
+    #   pyobjc-framework-quartz
+    #   pyobjc-framework-security
+    #   pyobjc-framework-uniformtypeidentifiers
+    #   pyobjc-framework-webkit
+    #   pywebview
+pyobjc-framework-cocoa==12.2.1
+    # via
+    #   pyobjc-framework-quartz
+    #   pyobjc-framework-security
+    #   pyobjc-framework-uniformtypeidentifiers
+    #   pyobjc-framework-webkit
+    #   pywebview
+pyobjc-framework-quartz==12.2.1
+    # via pywebview
+pyobjc-framework-security==12.2.1
+    # via pywebview
+pyobjc-framework-uniformtypeidentifiers==12.2.1
+    # via pywebview
+pyobjc-framework-webkit==12.2.1
+    # via pywebview
+pyperclip==1.11.0
+    # via fastmcp-slim
+pypika==0.51.1
+    # via chromadb
+pyproject-hooks==1.2.0
+    # via build
+python-datauri==3.0.2
+    # via agentscope
+python-dateutil==2.9.0.post0
+    # via
+    #   celery
+    #   elasticsearch
+    #   kubernetes
+    #   pandas
+python-dotenv==1.2.2
+    # via
+    #   agentscope-runtime
+    #   fastmcp-slim
+    #   pydantic-settings
+    #   qwenpaw
+    #   uvicorn
+python-engineio==4.13.3
+    # via python-socketio
+python-frontmatter==1.3.0
+    # via agentscope
+python-multipart==0.0.32
+    # via
+    #   fastmcp-slim
+    #   mcp
+python-socketio==5.16.3
+    # via agentscope
+python-socks==2.8.2
+    # via
+    #   aiohttp-socks
+    #   qwenpaw
+python-telegram-bot==22.8
+    # via qwenpaw
+pytz==2026.2
+    # via pandas
+pywebview==6.2.1
+    # via qwenpaw
+pyyaml==6.0.3
+    # via
+    #   chromadb
+    #   fastmcp-slim
+    #   huggingface-hub
+    #   jsonschema-path
+    #   kubernetes
+    #   python-frontmatter
+    #   qwenpaw
+    #   reme-ai
+    #   transformers
+    #   uvicorn
+qdrant-client==1.18.0
+    # via reme-ai
+questionary==2.1.1
+    # via qwenpaw
+redis==6.4.0
+    # via
+    #   agentscope-runtime
+    #   kombu
+referencing==0.37.0
+    # via
+    #   jsonschema
+    #   jsonschema-path
+    #   jsonschema-specifications
+regex==2026.6.28
+    # via
+    #   tiktoken
+    #   transformers
+reme-ai==0.3.1.8
+    # via qwenpaw
+requests==2.34.2
+    # via
+    #   agentscope-runtime
+    #   alibabacloud-tea
+    #   darabonba-core
+    #   dashscope
+    #   dingtalk-stream
+    #   docker
+    #   google-api-core
+    #   google-auth
+    #   google-genai
+    #   kubernetes
+    #   lark-oapi
+    #   opentelemetry-exporter-otlp-proto-http
+    #   oss2
+    #   requests-oauthlib
+    #   requests-toolbelt
+    #   tavily-python
+    #   tiktoken
+    #   twilio
+requests-oauthlib==2.0.0
+    # via kubernetes
+requests-toolbelt==1.0.0
+    # via lark-oapi
+rich==15.0.0
+    # via
+    #   agentscope-runtime
+    #   chromadb
+    #   cyclopts
+    #   dashscope
+    #   fastmcp-slim
+    #   reme-ai
+    #   rich-rst
+    #   typer
+rich-rst==2.1.0
+    # via cyclopts
+rpds-py==0.30.0
+    # via
+    #   jsonschema
+    #   referencing
+safetensors==0.8.0
+    # via transformers
+segno==1.6.6
+    # via qwenpaw
+shellingham==1.5.4
+    # via typer
+shortuuid==1.0.13
+    # via
+    #   agentscope
+    #   agentscope-runtime
+    #   qwenpaw
+simple-websocket==1.1.0
+    # via python-engineio
+six==1.17.0
+    # via
+    #   kubernetes
+    #   oss2
+    #   python-dateutil
+sniffio==1.3.1
+    # via
+    #   anthropic
+    #   elastic-transport
+    #   elasticsearch
+    #   google-genai
+    #   openai
+sounddevice==0.5.5
+    # via agentscope
+sqlalchemy==2.0.51
+    # via agentscope
+sqlite-vec==0.1.9
+    # via reme-ai
+sse-starlette==3.4.5
+    # via mcp
+starlette==1.3.1
+    # via
+    #   fastapi
+    #   fastmcp-slim
+    #   mcp
+    #   sse-starlette
+sympy==1.14.0
+    # via onnxruntime
+tavily-python==0.7.26
+    # via reme-ai
+tenacity==9.1.4
+    # via
+    #   chromadb
+    #   google-genai
+tiktoken==0.13.0
+    # via
+    #   agentscope
+    #   reme-ai
+    #   tavily-python
+tokenizers==0.22.2
+    # via
+    #   chromadb
+    #   transformers
+tomli==2.4.1
+    # via
+    #   build
+    #   cyclopts
+tqdm==4.68.3
+    # via
+    #   chromadb
+    #   huggingface-hub
+    #   openai
+    #   reme-ai
+    #   transformers
+transformers==5.13.0
+    # via
+    #   qwenpaw
+    #   reme-ai
+twilio==9.10.9
+    # via qwenpaw
+typer==0.26.8
+    # via
+    #   chromadb
+    #   dashscope
+    #   transformers
+typing-extensions==4.16.0
+    # via
+    #   aiohttp
+    #   aiosignal
+    #   anthropic
+    #   anyio
+    #   asgiref
+    #   chromadb
+    #   cryptography
+    #   cyclopts
+    #   elasticsearch
+    #   exceptiongroup
+    #   fastapi
+    #   fastmcp-slim
+    #   google-genai
+    #   grpcio
+    #   huggingface-hub
+    #   mcp
+    #   multidict
+    #   openai
+    #   opentelemetry-api
+    #   opentelemetry-exporter-otlp-proto-grpc
+    #   opentelemetry-exporter-otlp-proto-http
+    #   opentelemetry-sdk
+    #   opentelemetry-semantic-conventions
+    #   py-key-value-aio
+    #   pydantic
+    #   pydantic-core
+    #   pyee
+    #   pyjwt
+    #   pypika
+    #   python-datauri
+    #   pywebview
+    #   referencing
+    #   sqlalchemy
+    #   starlette
+    #   typing-inspection
+    #   uvicorn
+typing-inspection==0.4.2
+    # via
+    #   fastapi
+    #   mcp
+    #   pydantic
+    #   pydantic-settings
+tzdata==2026.2
+    # via
+    #   kombu
+    #   pandas
+    #   qwenpaw
+tzlocal==5.4.4
+    # via
+    #   apscheduler
+    #   celery
+uncalled-for==0.3.2
+    # via fastmcp-slim
+unpaddedbase64==2.1.0
+    # via matrix-nio
+urllib3==2.7.0
+    # via
+    #   docker
+    #   elastic-transport
+    #   kubernetes
+    #   qdrant-client
+    #   requests
+uvicorn==0.50.2
+    # via
+    #   agentscope-runtime
+    #   chromadb
+    #   fastmcp-slim
+    #   mcp
+    #   qwenpaw
+    #   reme-ai
+uvloop==0.22.1
+    # via uvicorn
+vine==5.1.0
+    # via
+    #   amqp
+    #   celery
+    #   kombu
+watchfiles==1.2.0
+    # via
+    #   fastmcp-slim
+    #   reme-ai
+    #   uvicorn
+wcwidth==0.8.2
+    # via prompt-toolkit
+websocket-client==1.9.0
+    # via
+    #   dashscope
+    #   kubernetes
+websockets==15.0.1
+    # via
+    #   dingtalk-stream
+    #   fastmcp-slim
+    #   google-genai
+    #   lark-oapi
+    #   uvicorn
+    #   wecom-aibot-python-sdk
+wecom-aibot-python-sdk==1.0.2
+    # via qwenpaw
+wsproto==1.3.2
+    # via simple-websocket
+yarl==1.24.2
+    # via aiohttp
+zipp==4.1.0
+    # via importlib-metadata
+
+# The following packages were excluded from the output:
+# qwenpaw

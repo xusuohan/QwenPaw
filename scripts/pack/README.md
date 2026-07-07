@@ -3,7 +3,8 @@
 One-click build: each script first builds a **wheel** via
 `scripts/wheel_build.sh` (includes the console frontend), then uses a
 **temporary conda environment** and **conda-pack** (no current dev env).
-Dependencies follow `pyproject.toml`.
+Dependencies follow `pyproject.toml`, **pinned** by `requirements/pinned.txt` for reproducible
+builds (see [Dependency lock](#dependency-lock) below).
 
 - **Windows**: wheel → conda-pack → unpack → NSIS installer (`.exe`)
 - **macOS**: wheel → conda-pack → unpack into `.app` → optional zip
@@ -70,6 +71,33 @@ When users download the QwenPaw macOS app (e.g. from Releases) as a `.app` (in a
 
 - **Remove quarantine attribute (not recommended for most users)**
   In Terminal: `xattr -cr /Applications/QwenPaw.app` (or the path to the `.app` after unzipping). This clears the download quarantine flag; less safe than right-click → Open.
+
+## Dependency lock
+
+`requirements/pinned.txt` pins every dependency of `qwenpaw[full]` — direct **and** transitive —
+to exact versions, so the packed desktop binaries are reproducible: two builds of the same source
+yield the same versions, instead of whatever pip resolves from the `>=` ranges in `pyproject.toml`
+at install time (version drift).
+
+The desktop build (`build_common.py`) applies this lock via `pip install --constraint` and **fails
+fast** if the file is missing or stale — a silent fallback would reintroduce the drift the lock
+exists to prevent. Override with `QWENPAW_PACK_NO_LOCK=1` only in an emergency.
+
+Regenerate after changing **any** dependency in `pyproject.toml`:
+
+```bash
+make lock-deps            # or:  bash scripts/pack/lock_deps.sh
+```
+
+The lock is compiled with `uv pip compile` from the **built wheel's** metadata (the project version
+is dynamic, so `pyproject.toml` alone can't be resolved statically). The root `qwenpaw` package is
+excluded from the lock — it is installed from a freshly built wheel whose version comes from
+`src/qwenpaw/__version__.py` and bumps independently. The lock targets Python 3.10 (the conda-pack
+build env).
+
+> **Scope:** CI and the user-facing `install.sh` intentionally stay **unlocked** — CI to catch
+> breakage from new upstream releases, the installers so end users receive bugfixes. Locking the
+> Docker image is a separate follow-up (its base Python differs from 3.10).
 
 ## CI
 

@@ -1,7 +1,8 @@
 # CoPaw Test & Coverage Makefile
 
 .PHONY: test test-unit test-contract test-integration test-channel test-channel-contract coverage-full clean \
-       portable portable-windows desktop-macos desktop-linux desktop-windows build-all dist-clean
+       portable portable-windows desktop-macos desktop-linux desktop-windows build-all dist-clean \
+       lock-deps
 
 # Python path
 PYTHON := python
@@ -89,6 +90,11 @@ build-all:
 		Linux)  $(MAKE) desktop-linux ;; \
 		*)      echo "Unsupported platform: $$(uname -s)"; exit 1 ;; \
 	esac
+
+# Regenerate the dependency lock for reproducible desktop builds (uv pip compile from wheel).
+# Run after changing any dependency in pyproject.toml.
+lock-deps:
+	bash scripts/pack/lock_deps.sh
 
 # Clean build artifacts
 dist-clean:
