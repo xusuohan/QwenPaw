@@ -25,8 +25,13 @@ _LEVEL_MAP = {
     "debug": logging.DEBUG,
 }
 
-# Top-level name for this package; only loggers under this name are shown.
-LOG_NAMESPACE = PROJECT_NAME.lower()
+# Logger namespace MUST match the actual import package name (qwenpaw) so
+# records from `logging.getLogger(__name__)` in qwenpaw.* modules propagate
+# up to this logger where the file handler is attached. PROJECT_NAME may
+# differ (display branding) — do not derive LOG_NAMESPACE from it, or
+# 99% of log records (workspace, multi_agent_manager, services, ...) get
+# silently dropped because they live in the qwenpaw.* hierarchy.
+LOG_NAMESPACE = "qwenpaw"
 
 # Canonical log file name and path — import these instead of reconstructing.
 LOG_FILE_BASENAME = f"{LOG_NAMESPACE}.log"
